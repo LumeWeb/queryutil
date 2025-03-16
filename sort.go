@@ -20,6 +20,9 @@ const (
 // SortConfig defines configuration for field sorting validation.
 // It maintains a list of field names that are allowed to be used
 // in sort operations, preventing sorting on unauthorized fields.
+//
+// This is useful for security to ensure users can only sort by
+// fields that are intended to be sortable.
 type SortConfig struct {
 	// Fields that are allowed to be sorted
 	SortableFields []string
@@ -93,6 +96,17 @@ func ParseQuerySort(query map[string][]string, config *SortConfig) ([]Sort, erro
 // ApplySort applies sort specifications to a GORM query.
 // For each Sort struct, adds an ORDER BY clause to the query.
 // Multiple sorts are applied in the order they appear in the slice.
+//
+// Example:
+//
+//	db := gorm.Open(...)
+//	sorts := []Sort{
+//	    {Field: "name", Order: OrderAsc},
+//	    {Field: "created_at", Order: OrderDesc},
+//	}
+//	query := ApplySort(db, sorts)
+//	var users []User
+//	query.Find(&users)
 func ApplySort(tx *gorm.DB, sorts []Sort) *gorm.DB {
 	for _, sort := range sorts {
 		tx = tx.Order(fmt.Sprintf("%s %s", sort.Field, sort.Order))
