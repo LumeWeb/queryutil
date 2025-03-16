@@ -1,11 +1,16 @@
-// Package queryutil implements Refine-compatible query parsing utilities for filtering, sorting, and pagination.
+// Package queryutil implements HTTP-agnostic query parsing utilities for filtering, sorting, and pagination.
 //
-// This package provides functionality to parse and handle query parameters in the format
-// expected by Refine's Simple REST Data Provider specification. It includes support for:
+// This package provides functionality to parse and handle query parameters in a format
+// compatible with Refine's Simple REST Data Provider specification, while remaining
+// framework-agnostic. It includes support for:
 //   - Filtering with various operators (equals, not equals, gte, lte, contains)
 //   - Sorting with multiple fields and directions
 //   - Pagination with server/client modes
 //   - GORM integration helpers
+//   - Extension points for custom request sources
+//
+// The core package is HTTP-agnostic, with HTTP-specific functionality provided
+// in the http subpackage.
 package queryutil
 
 import (
@@ -18,12 +23,14 @@ import (
 )
 
 // FilterOperator represents supported filter operations.
+// These operators are used in query parameters with the format field_operator=value.
+//
 // Available operators are:
-//   - "" (equals, default)
-//   - "ne" (not equals)
-//   - "gte" (greater than or equal)
-//   - "lte" (less than or equal)
-//   - "like" (contains)
+//   - "" (equals, default) - Example: name=john
+//   - "ne" (not equals) - Example: status_ne=inactive
+//   - "gte" (greater than or equal) - Example: age_gte=18
+//   - "lte" (less than or equal) - Example: price_lte=100
+//   - "like" (contains) - Example: title_like=test
 type FilterOperator string
 
 const (
@@ -126,7 +133,10 @@ func ParseQueryFilters(query map[string][]string) ([]Filter, error) {
 
 // GlobalSearchConfig defines configuration for handling the global search 'q' parameter.
 // It specifies which database columns should be included in the LIKE query when
-// performing a global search.
+// performing a global search across multiple fields.
+//
+// This is typically used with the special 'q' query parameter that performs
+// a search across multiple columns simultaneously.
 type GlobalSearchConfig struct {
 	// Columns to search in with LIKE queries
 	SearchableColumns []string
@@ -143,6 +153,17 @@ type GlobalSearchConfig struct {
 //   - gte: field >= value
 //   - lte: field <= value
 //   - contains: field LIKE %value%
+//
+// Example:
+//
+//	db := gorm.Open(...)
+//	filters := []Filter{
+//	    {Field: "name", Operator: OperatorEquals, Value: "John"},
+//	    {Field: "age", Operator: OperatorGTE, Value: 18},
+//	}
+//	query := ApplyFilters(db, filters, nil)
+//	var users []User
+//	query.Find(&users)
 func ApplyFilters(tx *gorm.DB, filters []Filter, searchConfig *GlobalSearchConfig) *gorm.DB {
 	for _, filter := range filters {
 		// Special handling for global search

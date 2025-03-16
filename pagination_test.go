@@ -79,3 +79,52 @@ func TestParseQueryPagination(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatContentRange(t *testing.T) {
+	pagination := Pagination{
+		Start:    10,
+		End:      20,
+		PageSize: 10,
+		Mode:     "server",
+	}
+	
+	result := FormatContentRange("users", pagination, 5, 100)
+	
+	assert.Equal(t, "users 10-14/100", result)
+}
+
+func TestGetResultCount(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     interface{}
+		expected int
+	}{
+		{
+			name:     "slice with items",
+			data:     []string{"a", "b", "c"},
+			expected: 3,
+		},
+		{
+			name:     "empty slice",
+			data:     []int{},
+			expected: 0,
+		},
+		{
+			name:     "non-slice",
+			data:     "not a slice",
+			expected: 0,
+		},
+		{
+			name:     "nil",
+			data:     nil,
+			expected: 0,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			count := GetResultCount(tt.data)
+			assert.Equal(t, tt.expected, count)
+		})
+	}
+}

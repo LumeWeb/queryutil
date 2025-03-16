@@ -4,6 +4,8 @@ import "fmt"
 
 // ValidationError is the base error type for all validation errors.
 // It includes the field name that failed validation and a descriptive message.
+// This is the parent type for more specific validation errors like
+// PaginationError, SortError, and FilterError.
 type ValidationError struct {
 	Field   string
 	Message string
