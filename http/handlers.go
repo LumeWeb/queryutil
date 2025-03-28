@@ -1,9 +1,11 @@
 package http
 
 import (
+	"errors"
 	"fmt"
-	"net/http"
 	"go.lumeweb.com/queryutil"
+	"gorm.io/gorm"
+	"net/http"
 )
 
 // ProcessListRequest handles the common pattern for list endpoints.
@@ -61,6 +63,10 @@ func ProcessListRequest[T any, D any](
 	// Get data from service
 	items, total, err := service(filters, sorts, pagination)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, fmt.Sprintf("Entity %s not found", entityName), http.StatusNotFound)
+			return err
+		}
 		http.Error(w, fmt.Sprintf("Failed to list %s: %v", entityName, err), http.StatusInternalServerError)
 		return err
 	}
