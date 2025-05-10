@@ -1,8 +1,8 @@
-package queryutil
+package filter
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestParseQuerySort(t *testing.T) {
@@ -60,7 +60,7 @@ func TestParseQuerySort(t *testing.T) {
 			query: map[string][]string{
 				"_sort": {"invalid_field"},
 			},
-			config:   config,
+			config:  config,
 			wantErr: true,
 		},
 		{
@@ -80,12 +80,12 @@ func TestParseQuerySort(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ParseQuerySort(tt.query, tt.config)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})

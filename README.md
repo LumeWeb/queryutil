@@ -19,6 +19,45 @@ go get go.lumeweb.com/queryutil
 
 ### Request Parsing
 
+#### JSON Input Support
+```go
+// Parse filters from JSON string
+jsonFilters := `[
+  {
+    "field": "name",
+    "operator": "contains",
+    "value": "john"
+  },
+  {
+    "operator": "or",
+    "value": [
+      {
+        "field": "age",
+        "operator": "gte",
+        "value": 30
+      }
+    ]
+  }
+]`
+
+filters, _, _, err := queryutil.ParseRequestFromJSON(jsonFilters)
+if err != nil {
+    // Handle error
+}
+```
+
+#### Mixed Input Handling
+```go
+// If using both parameter and JSON parsing:
+paramsFilters, paramSorts, pagination, err := queryutil.ParseRequest(r)
+jsonFilters, _, _, err := queryutil.ParseRequestFromJSON(body)
+
+// Merge filter sets
+allFilters := append(paramsFilters, jsonFilters...)
+```
+
+### Request Parsing
+
 ```go
 // Parse all query parameters from request
 filters, sorts, pagination, err := queryutil.ParseRequest(r)
