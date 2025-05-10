@@ -2,32 +2,20 @@ package http
 
 import (
 	"go.lumeweb.com/queryutil"
+	"go.lumeweb.com/queryutil/filter/parser"
 	"net/http"
 )
 
 // ParseRequestHTTP parses query parameters from an http.Request.
-// This is a convenience wrapper around queryutil.ParseQuery that
-// extracts the URL query parameters from the request.
-//
-// Example:
-//
-//	r, _ := http.NewRequest("GET", "/?name=john&_sort=name", nil)
-//	filters, sorts, pagination, err := http.ParseRequestHTTP(r)
+// Maintained for backward compatibility
 func ParseRequestHTTP(r *http.Request) ([]queryutil.Filter, []queryutil.Sort, queryutil.Pagination, error) {
-	return queryutil.ParseQuery(r.URL.Query())
+	// Use the query param parser directly with the query values
+	p := parser.NewQueryParamParser(r.URL.Query())
+	return queryutil.ParseFromSource(p)
 }
 
-// ParseRequestWithSearchHTTP parses query parameters with global search support.
-// This function is similar to ParseRequestHTTP but also accepts a GlobalSearchConfig
-// for handling the special 'q' parameter for searching across multiple columns.
-//
-// Example:
-//
-//	searchConfig := &queryutil.GlobalSearchConfig{
-//	    SearchableColumns: []string{"name", "email", "bio"},
-//	}
-//	r, _ := http.NewRequest("GET", "/?q=john&_sort=name", nil)
-//	filters, sorts, pagination, err := http.ParseRequestWithSearchHTTP(r, searchConfig)
+// ParseRequestWithSearchHTTP parses query parameters with global search support
+// Deprecated: Use ParseFromSource with a custom parser instead
 func ParseRequestWithSearchHTTP(r *http.Request, searchConfig *queryutil.GlobalSearchConfig) ([]queryutil.Filter, []queryutil.Sort, queryutil.Pagination, error) {
 	return queryutil.ParseQueryWithSearch(r.URL.Query(), searchConfig)
 }
@@ -49,6 +37,6 @@ func ParseRequestWithSearchHTTP(r *http.Request, searchConfig *queryutil.GlobalS
 func SetContentRangeHeader(w http.ResponseWriter, entityName string, pagination queryutil.Pagination,
 	data interface{}, totalCount int64) {
 	resultCount := queryutil.GetResultCount(data)
-	contentRange := queryutil.FormatContentRange(entityName, pagination, resultCount, totalCount)
+	contentRange := queryutil.FormatContentRange(entityName, pagination, resultCount, int(totalCount))
 	w.Header().Set("Content-Range", contentRange)
 }

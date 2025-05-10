@@ -1,0 +1,31 @@
+packages:
+  go.lumeweb.com/queryutil/filter/parser:
+    config:
+      dir: "{{.InterfaceDir}}"
+      structname: "{{.Mock}}{{.InterfaceName}}"
+      outpkg: "{{.PackageName}}"
+      inpackage: true
+    interfaces:
+      Parser: {}
+  go.lumeweb.com/queryutil/filter/builder:
+    config:
+      dir: "{{.InterfaceDir}}"
+      structname: "{{.Mock}}{{.InterfaceName}}"
+      outpkg: "{{.PackageName}}"
+      inpackage: true
+    interfaces:
+      QueryBuilder: {} # Make QueryBuilder a key in a map.
+  go.lumeweb.com/queryutil/filter:
+    config:
+      dir: "{{.InterfaceDir}}"
+      structname: "{{.Mock}}{{.InterfaceName}}"
+      outpkg: "{{.PackageName}}"
+      inpackage: true
+    interfaces:
+      Visitor: {}
+      CrudFilter: {}
+      Clause: {}
+with-expecter: true
+disable-version-string: true
+issue-845-fix: true
+resolve-type-alias: false

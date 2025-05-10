@@ -1,11 +1,12 @@
 package queryutil
 
 import (
+	"go.lumeweb.com/queryutil/filter"
 	"net/http"
 	"net/url"
 	"sort"
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,13 +29,13 @@ func TestParseQuery(t *testing.T) {
 				"_start":  []string{"0"},
 				"_end":    []string{"10"},
 			},
-			wantFilters: []Filter{
-				{Field: "name", Operator: OperatorEquals, Value: "john"},
-				{Field: "age", Operator: OperatorGTE, Value: "20"},
+			wantFilters: []filter.CrudFilter{
+				&filter.LogicalFilter{Field: "name", Operator: filter.OpEq, Value: "john"},
+				&filter.LogicalFilter{Field: "age", Operator: filter.OpGte, Value: 20},
 			},
-			wantSorts: []Sort{
-				{Field: "name", Order: OrderDesc},
-				{Field: "age", Order: OrderAsc},
+			wantSorts: []filter.Sort{
+				{Field: "name", Order: filter.OrderDesc},
+				{Field: "age", Order: filter.OrderAsc},
 			},
 			wantPagination: Pagination{
 				Start:    0,
@@ -57,19 +58,19 @@ func TestParseQuery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test ParseQuery directly
 			filters, sorts, pagination, err := ParseQuery(tt.query)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			assert.NoError(t, err)
 			// Sort both slices by Field to make comparison order-independent
 			sort.Slice(filters, func(i, j int) bool {
-				return filters[i].Field < filters[j].Field
+				return filters[i].(*filter.LogicalFilter).Field < filters[j].(*filter.LogicalFilter).Field
 			})
 			sort.Slice(tt.wantFilters, func(i, j int) bool {
-				return tt.wantFilters[i].Field < tt.wantFilters[j].Field
+				return tt.wantFilters[i].(*filter.LogicalFilter).Field < tt.wantFilters[j].(*filter.LogicalFilter).Field
 			})
 			assert.Equal(t, tt.wantFilters, filters)
 			assert.Equal(t, tt.wantSorts, sorts)
@@ -97,13 +98,13 @@ func TestParseRequest(t *testing.T) {
 				"_start":  []string{"0"},
 				"_end":    []string{"10"},
 			},
-			wantFilters: []Filter{
-				{Field: "name", Operator: OperatorEquals, Value: "john"},
-				{Field: "age", Operator: OperatorGTE, Value: "20"},
+			wantFilters: []filter.CrudFilter{
+				&filter.LogicalFilter{Field: "name", Operator: filter.OpEq, Value: "john"},
+				&filter.LogicalFilter{Field: "age", Operator: filter.OpGte, Value: 20},
 			},
-			wantSorts: []Sort{
-				{Field: "name", Order: OrderDesc},
-				{Field: "age", Order: OrderAsc},
+			wantSorts: []filter.Sort{
+				{Field: "name", Order: filter.OrderDesc},
+				{Field: "age", Order: filter.OrderAsc},
 			},
 			wantPagination: Pagination{
 				Start:    0,
@@ -118,21 +119,21 @@ func TestParseRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &http.Request{URL: &url.URL{RawQuery: tt.query.Encode()}}
-			
+
 			filters, sorts, pagination, err := ParseRequest(r)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			assert.NoError(t, err)
 			// Sort both slices by Field to make comparison order-independent
 			sort.Slice(filters, func(i, j int) bool {
-				return filters[i].Field < filters[j].Field
+				return filters[i].(*filter.LogicalFilter).Field < filters[j].(*filter.LogicalFilter).Field
 			})
 			sort.Slice(tt.wantFilters, func(i, j int) bool {
-				return tt.wantFilters[i].Field < tt.wantFilters[j].Field
+				return tt.wantFilters[i].(*filter.LogicalFilter).Field < tt.wantFilters[j].(*filter.LogicalFilter).Field
 			})
 			assert.Equal(t, tt.wantFilters, filters)
 			assert.Equal(t, tt.wantSorts, sorts)

@@ -1,4 +1,4 @@
-package queryutil
+package filter
 
 import "fmt"
 
@@ -6,6 +6,8 @@ import "fmt"
 // It includes the field name that failed validation and a descriptive message.
 // This is the parent type for more specific validation errors like
 // PaginationError, SortError, and FilterError.
+// ValidationError is returned for invalid filter/sort/pagination parameters.
+// Embedded in specific error types to preserve field context.
 type ValidationError struct {
 	Field   string
 	Message string
@@ -17,8 +19,9 @@ func (e *ValidationError) Error() string {
 
 // PaginationError represents pagination-specific validation errors.
 // Used when pagination parameters (_start, _end) are invalid.
+// PaginationError indicates invalid _start/_end parameter values
 type PaginationError struct {
-	ValidationError
+	ValidationError  // Embeds field name and message
 }
 
 // NewPaginationError creates a new PaginationError
@@ -37,7 +40,6 @@ type SortError struct {
 	ValidationError
 }
 
-// NewSortError creates a new SortError
 func NewSortError(field, message string) *SortError {
 	return &SortError{
 		ValidationError: ValidationError{

@@ -1,8 +1,8 @@
-package queryutil
+package filter
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestParseQueryPagination(t *testing.T) {
@@ -87,9 +87,9 @@ func TestFormatContentRange(t *testing.T) {
 		PageSize: 10,
 		Mode:     "server",
 	}
-	
+
 	result := FormatContentRange("users", pagination, 5, 100)
-	
+
 	assert.Equal(t, "users 10-14/100", result)
 }
 
@@ -120,7 +120,7 @@ func TestGetResultCount(t *testing.T) {
 			expected: 0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			count := GetResultCount(tt.data)

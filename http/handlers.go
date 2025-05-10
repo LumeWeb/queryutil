@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"go.lumeweb.com/queryutil"
+	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/gorm"
 	"net/http"
 )
@@ -46,15 +47,43 @@ import (
 //	        return
 //	    }
 //	})
+type ProcessOptions struct {
+	SearchConfig *filter.GlobalSearchConfig
+	SortConfig   *filter.SortConfig
+}
+
+type ProcessOption func(*ProcessOptions)
+
+func WithSearchConfig(cfg *filter.GlobalSearchConfig) ProcessOption {
+	return func(o *ProcessOptions) {
+		o.SearchConfig = cfg
+	}
+}
+
+func WithSortConfig(cfg *filter.SortConfig) ProcessOption {
+	return func(o *ProcessOptions) {
+		o.SortConfig = cfg
+	}
+}
+
 func ProcessListRequest[T any, D any](
 	w http.ResponseWriter,
 	r *http.Request,
 	entityName string,
 	service queryutil.EntityFunc[T],
 	converter func(T) D,
+	opts ...ProcessOption,
 ) error {
+
 	// Parse query parameters
-	filters, sorts, pagination, err := ParseRequestHTTP(r)
+	// Process options
+	options := &ProcessOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	parser := queryutil.NewHTTPRequestParser(r, options.SearchConfig, options.SortConfig)
+	filters, sorts, pagination, err := queryutil.ParseFromSource(parser)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid query parameters: %v", err), http.StatusBadRequest)
 		return err

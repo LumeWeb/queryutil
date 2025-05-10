@@ -2,7 +2,10 @@ package queryutil
 
 import (
 	"fmt"
+	"go.lumeweb.com/queryutil/filter"
+	"go.lumeweb.com/queryutil/filter/parser"
 	"net/http"
+	"net/url"
 )
 
 // ParseQuery parses all query parameters from a map.
@@ -24,26 +27,9 @@ import (
 //	    "_end": {"10"},
 //	}
 //	filters, sorts, pagination, err := ParseQuery(query)
-func ParseQuery(query map[string][]string) ([]Filter, []Sort, Pagination, error) {
-	// Parse filters
-	filters, err := ParseQueryFilters(query)
-	if err != nil {
-		return nil, nil, Pagination{}, err
-	}
-
-	// Parse sort
-	sorts, err := ParseQuerySort(query, nil) // Pass config if needed
-	if err != nil {
-		return nil, nil, Pagination{}, err
-	}
-
-	// Parse pagination
-	pagination, err := ParseQueryPagination(query)
-	if err != nil {
-		return nil, nil, Pagination{}, err
-	}
-
-	return filters, sorts, pagination, nil
+func ParseQuery(query map[string][]string) ([]CrudFilter, []Sort, Pagination, error) {
+	p := parser.NewQueryParamParser(query)
+	return ParseFromSource(p)
 }
 
 // ParseQueryWithSearch parses query parameters with global search support.
@@ -52,38 +38,48 @@ func ParseQuery(query map[string][]string) ([]Filter, []Sort, Pagination, error)
 //
 // The searchConfig parameter specifies which columns should be included
 // in global search operations when the 'q' parameter is present.
-func ParseQueryWithSearch(query map[string][]string, searchConfig *GlobalSearchConfig) ([]Filter, []Sort, Pagination, error) {
-	filters, sorts, pagination, err := ParseQuery(query)
-	if err != nil {
-		return nil, nil, Pagination{}, err
-	}
-
-	return filters, sorts, pagination, nil
+func ParseQueryWithSearch(query map[string][]string, searchConfig *filter.GlobalSearchConfig) ([]CrudFilter, []Sort, Pagination, error) {
+	p := parser.NewQueryParamParser(query, parser.WithSearchConfig(searchConfig))
+	return ParseFromSource(p)
 }
 
 // HTTPRequestParser implements the RequestParser interface for HTTP requests.
 // It provides a way to parse query parameters from an HTTP request's URL query.
 type HTTPRequestParser struct {
-	Query map[string][]string
-	SearchConfig *GlobalSearchConfig
+	Query        url.Values
+	SearchConfig *filter.GlobalSearchConfig
+	sortConfig   *filter.SortConfig
 }
 
 // NewHTTPRequestParser creates a new HTTPRequestParser from an http.Request
-func NewHTTPRequestParser(r *http.Request, searchConfig *GlobalSearchConfig) *HTTPRequestParser {
+func NewHTTPRequestParser(r *http.Request, searchConfig *filter.GlobalSearchConfig, sortConfig *filter.SortConfig) *HTTPRequestParser {
 	return &HTTPRequestParser{
-		Query: r.URL.Query(),
+		Query:        r.URL.Query(),
 		SearchConfig: searchConfig,
+		sortConfig:   sortConfig,
 	}
 }
 
 // ParseFilters implements RequestParser.ParseFilters
-func (p *HTTPRequestParser) ParseFilters() ([]Filter, error) {
-	return ParseQueryFilters(p.Query)
+func (p *HTTPRequestParser) ParseFilters() ([]filter.CrudFilter, error) {
+	return parser.NewQueryParamParser(p.Query).ParseFilters()
 }
 
 // ParseSorts implements RequestParser.ParseSorts
-func (p *HTTPRequestParser) ParseSorts() ([]Sort, error) {
-	return ParseQuerySort(p.Query, nil)
+func (p *HTTPRequestParser) ParseSorts(config *filter.SortConfig) ([]filter.Sort, error) {
+	// Use provided config if available, fallback to our config
+	if config == nil {
+		config = p.sortConfig
+	}
+	if config == nil {
+		config = &filter.SortConfig{} // Default empty config
+	}
+	return ParseQuerySort(p.Query, config)
+}
+
+// GetSortConfig returns the parser's sort configuration
+func (p *HTTPRequestParser) GetSortConfig() *filter.SortConfig {
+	return p.sortConfig
 }
 
 // ParsePagination implements RequestParser.ParsePagination
@@ -93,33 +89,22 @@ func (p *HTTPRequestParser) ParsePagination() (Pagination, error) {
 
 // ParseRequest parses all query parameters from an HTTP request.
 // This is maintained for backward compatibility with older code.
-//
-// New code should use the http.ParseRequestHTTP function instead,
-// which provides a more type-safe interface.
-//
-// Example:
-//
-//	// With an http.Request
-//	r, _ := http.NewRequest("GET", "/?name=john&_sort=name", nil)
-//	filters, sorts, pagination, err := ParseRequest(r)
-func ParseRequest(r interface{}) ([]Filter, []Sort, Pagination, error) {
-	// Check if r is an *http.Request
+func ParseRequest(r interface{}) ([]CrudFilter, []Sort, Pagination, error) {
 	if req, ok := r.(*http.Request); ok {
-		parser := NewHTTPRequestParser(req, nil)
-		return ParseFromCustomSource(parser)
+		filters, sorts, pagination, err := ParseFromSource(NewHTTPRequestParser(req, nil, nil))
+		return filters, sorts, pagination, err
 	}
-	
 	return nil, nil, Pagination{}, fmt.Errorf("unsupported request type")
 }
 
 // ParseRequestWithSearch parses query parameters with global search support.
 // This is maintained for backward compatibility.
-func ParseRequestWithSearch(r interface{}, searchConfig *GlobalSearchConfig) ([]Filter, []Sort, Pagination, error) {
-	// Check if r is an *http.Request
+func ParseRequestWithSearch(r interface{}, searchConfig *GlobalSearchConfig) ([]CrudFilter, []Sort, Pagination, error) {
 	if req, ok := r.(*http.Request); ok {
-		parser := NewHTTPRequestParser(req, searchConfig)
-		return ParseFromCustomSource(parser)
+		filters, sorts, pagination, err := ParseFromSource(NewHTTPRequestParser(req, searchConfig, &filter.SortConfig{
+			SortableFields: searchConfig.SearchableColumns,
+		}))
+		return filters, sorts, pagination, err
 	}
-	
 	return nil, nil, Pagination{}, fmt.Errorf("unsupported request type")
 }
