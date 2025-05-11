@@ -7,6 +7,32 @@ import (
 	"log"
 )
 
+var operatorMap = map[filter.Operator]string{
+	filter.OpEq:           "= ?",
+	filter.OpNe:           "<> ?",
+	filter.OpLt:           "< ?",
+	filter.OpGt:           "> ?",
+	filter.OpLte:          "<= ?",
+	filter.OpGte:          ">= ?",
+	filter.OpContains:     "LIKE ?",
+	filter.OpContainss:    "LIKE ?",
+	filter.OpNcontains:    "NOT LIKE ?",
+	filter.OpNcontainss:   "NOT LIKE ?",
+	filter.OpStartswith:   "LIKE ?",
+	filter.OpStartswiths:  "LIKE ?",
+	filter.OpNstartswith:  "NOT LIKE ?",
+	filter.OpNstartswiths: "NOT LIKE ?",
+	filter.OpEndswith:     "LIKE ?",
+	filter.OpEndswiths:    "LIKE ?",
+	filter.OpNendswith:    "NOT LIKE ?",
+	filter.OpNendswiths:   "NOT LIKE ?",
+	filter.OpNull:         "IS NULL",
+	filter.OpNnull:        "IS NOT NULL",
+	filter.OpIn:           "IN (?)",
+	filter.OpNin:          "NOT IN (?)",
+	filter.OpBetween:      "BETWEEN ? AND ?",
+}
+
 type GORMBuilder struct {
 	baseTx       *gorm.DB // The original DB connection/transaction
 	searchConfig *filter.GlobalSearchConfig
@@ -176,38 +202,12 @@ func (b *GORMBuilder) VisitConditional(f *filter.ConditionalFilter) (filter.Clau
 func buildCondition(field string, op filter.Operator, value interface{}) (string, interface{}) {
 	formattedVal := formatValue(op, value)
 
-	opMap := map[filter.Operator]string{
-		filter.OpEq:           "= ?",
-		filter.OpNe:           "<> ?",
-		filter.OpLt:           "< ?",
-		filter.OpGt:           "> ?",
-		filter.OpLte:          "<= ?",
-		filter.OpGte:          ">= ?",
-		filter.OpContains:     "LIKE ?",
-		filter.OpContainss:    "LIKE ?",
-		filter.OpNcontains:    "NOT LIKE ?",
-		filter.OpNcontainss:   "NOT LIKE ?",
-		filter.OpStartswith:   "LIKE ?",
-		filter.OpStartswiths:  "LIKE ?",
-		filter.OpNstartswith:  "NOT LIKE ?",
-		filter.OpNstartswiths: "NOT LIKE ?",
-		filter.OpEndswith:     "LIKE ?",
-		filter.OpEndswiths:    "LIKE ?",
-		filter.OpNendswith:    "NOT LIKE ?",
-		filter.OpNendswiths:   "NOT LIKE ?",
-		filter.OpNull:         "IS NULL",
-		filter.OpNnull:        "IS NOT NULL",
-		filter.OpIn:           "IN (?)",
-		filter.OpNin:          "NOT IN (?)",
-		filter.OpBetween:      "BETWEEN ? AND ?",
-	}
-
 	// Handle global search
 	if field == "q" {
 		return "", formattedVal // Will be handled in ApplyClauses
 	}
 
-	return opMap[op], formattedVal
+	return operatorMap[op], formattedVal
 }
 
 func formatValue(op filter.Operator, value interface{}) interface{} {
