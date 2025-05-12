@@ -11,41 +11,47 @@ type (
 	RequestParser      = parser.Parser
 	Sort               = filter.Sort
 	SortConfig         = filter.SortConfig
-	SortOrder          = filter.SortOrder
+	SortOrder          = filter.SortOrder  
 	CrudFilter         = filter.CrudFilter
 	GlobalSearchConfig = filter.GlobalSearchConfig
 	Pagination         = filter.Pagination
 	PaginationError    = filter.PaginationError
 	Filter             = filter.CrudFilter
 	Operator           = filter.Operator
-	OpEq               = filter.OpEq
-	OpNe               = filter.OpNe
-	OpLt               = filter.OpLt
-	OpGt               = filter.OpGt
-	OpLte              = filter.OpLte
-	OpGte              = filter.OpGte
-	OpContains         = filter.OpContains
-	OpContainss        = filter.OpContainss
-	OpNcontains        = filter.OpNcontains
-	OpNcontainss       = filter.OpNcontainss
-	OpIn               = filter.OpIn
-	OpNin              = filter.OpNin
-	OpIna              = filter.OpIna
-	OpNina             = filter.OpNina
-	OpBetween          = filter.OpBetween
-	OpNbetween         = filter.OpNbetween
-	OpNull             = filter.OpNull
-	OpNnull            = filter.OpNnull
-	OpStartswith       = filter.OpStartswith
-	OpStartswiths      = filter.OpStartswiths
-	OpNstartswith      = filter.OpNstartswith
-	OpNstartswiths     = filter.OpNstartswiths
-	OpEndswith         = filter.OpEndswith
-	OpEndswiths        = filter.OpEndswiths
-	OpNendswith        = filter.OpNendswith
-	OpNendswiths       = filter.OpNendswiths
-	OperatorMap        = filter.OperatorMap
 )
+
+// Re-export filter operators as typed constants
+const (
+	OpEq           = filter.OpEq
+	OpNe           = filter.OpNe
+	OpLt           = filter.OpLt
+	OpGt           = filter.OpGt
+	OpLte          = filter.OpLte
+	OpGte          = filter.OpGte
+	OpContains     = filter.OpContains
+	OpContainss    = filter.OpContainss
+	OpNcontains    = filter.OpNcontains
+	OpNcontainss   = filter.OpNcontainss
+	OpIn           = filter.OpIn
+	OpNin          = filter.OpNin
+	OpIna          = filter.OpIna
+	OpNina         = filter.OpNina
+	OpBetween      = filter.OpBetween
+	OpNbetween     = filter.OpNbetween
+	OpNull         = filter.OpNull
+	OpNnull        = filter.OpNnull
+	OpStartswith   = filter.OpStartswith
+	OpStartswiths  = filter.OpStartswiths
+	OpNstartswith  = filter.OpNstartswith
+	OpNstartswiths = filter.OpNstartswiths
+	OpEndswith     = filter.OpEndswith
+	OpEndswiths    = filter.OpEndswiths
+	OpNendswith    = filter.OpNendswith
+	OpNendswiths   = filter.OpNendswiths
+)
+
+// Re-export operator map as a variable
+var OperatorMap = filter.OperatorMap
 
 // QueryBuilder defines the interface for building query clauses
 type QueryBuilder interface {
