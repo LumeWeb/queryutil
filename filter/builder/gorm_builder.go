@@ -199,7 +199,7 @@ func (b *GORMBuilder) VisitConditional(f *filter.ConditionalFilter) (filter.Clau
 	}, nil
 }
 
-func buildCondition(field string, op filter.Operator, value interface{}) (string, interface{}) {
+func buildCondition(field string, op filter.Operator, value any) (string, any) {
 	formattedVal := formatValue(op, value)
 
 	// Handle global search
@@ -210,7 +210,7 @@ func buildCondition(field string, op filter.Operator, value interface{}) (string
 	return operatorMap[op], formattedVal
 }
 
-func formatValue(op filter.Operator, value interface{}) interface{} {
+func formatValue(op filter.Operator, value any) any {
 	switch op {
 	case filter.OpContains, filter.OpNcontains:
 		return fmt.Sprintf("%%%v%%", value)
@@ -221,8 +221,8 @@ func formatValue(op filter.Operator, value interface{}) interface{} {
 	case filter.OpEndswith, filter.OpEndswiths, filter.OpNendswith, filter.OpNendswiths:
 		return fmt.Sprintf("%%%v", value)
 	case filter.OpBetween:
-		if vals, ok := value.([]interface{}); ok && len(vals) == 2 {
-			return []interface{}{vals[0], vals[1]}
+		if vals, ok := value.([]any); ok && len(vals) == 2 {
+			return []any{vals[0], vals[1]}
 		}
 	}
 	return value

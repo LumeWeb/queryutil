@@ -120,12 +120,12 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "metadata",
 					Operator: filter.OpEq,
-					Value:    map[string]interface{}{"key": "value"},
+					Value:    map[string]any{"key": "value"},
 				},
 				&filter.LogicalFilter{
 					Field:    "tags",
 					Operator: filter.OpIn,
-					Value:    []interface{}{"go", "test"},
+					Value:    []any{"go", "test"},
 				},
 			},
 			wantErr: false,

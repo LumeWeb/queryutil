@@ -96,7 +96,7 @@ func TestFormatContentRange(t *testing.T) {
 func TestGetResultCount(t *testing.T) {
 	tests := []struct {
 		name     string
-		data     interface{}
+		data     any
 		expected int
 	}{
 		{

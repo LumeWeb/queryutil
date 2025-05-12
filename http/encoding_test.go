@@ -10,7 +10,7 @@ import (
 func TestEncodeJSON(t *testing.T) {
 	tests := []struct {
 		name           string
-		value          interface{}
+		value          any
 		expectedBody   string
 		expectedHeader string
 	}{
@@ -58,9 +58,9 @@ func TestEncodeJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			
+
 			err := EncodeJSON(w, tt.value)
-			
+
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedHeader, w.Header().Get("Content-Type"))
 			assert.Equal(t, tt.expectedBody, w.Body.String())

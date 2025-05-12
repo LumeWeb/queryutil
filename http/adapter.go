@@ -35,7 +35,7 @@ func ParseRequestWithSearchHTTP(r *http.Request, searchConfig *queryutil.GlobalS
 //	SetContentRangeHeader(w, "users", pagination, users, 100)
 //	// Sets header: Content-Range: users 0-9/100
 func SetContentRangeHeader(w http.ResponseWriter, entityName string, pagination queryutil.Pagination,
-	data interface{}, totalCount int64) {
+	data any, totalCount int64) {
 	resultCount := queryutil.GetResultCount(data)
 	contentRange := queryutil.FormatContentRange(entityName, pagination, resultCount, int(totalCount))
 	w.Header().Set("Content-Range", contentRange)
