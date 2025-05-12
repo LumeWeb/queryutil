@@ -3,7 +3,6 @@ package parser
 import (
 	"fmt"
 	"go.lumeweb.com/queryutil/filter"
-	"log"
 	"net/url"
 	"regexp"
 	"sort"
@@ -72,11 +71,9 @@ func (p *QueryParamParser) ParseSorts(config *filter.SortConfig) ([]filter.Sort,
 // Example: filters[or][0][age][gte]=30&filters[or][1][name][contains]=john
 // Returns combined filters or validation error if parameters are malformed
 func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
-	log.Printf("Starting query parameter parsing with config: %+v", p.config)
 	filterMap := make(map[string]any)
 
 	// Build filter structure from query parameters
-	log.Printf("Processing %d query parameters", len(p.query))
 	for key, values := range p.query {
 		// Skip special parameters that start with _
 		if strings.HasPrefix(key, "_") {
@@ -85,7 +82,6 @@ func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
 
 		// Handle both prefixed and non-prefixed filter formats
 		if !strings.HasPrefix(key, filterPrefix) && !strings.Contains(key, "[") {
-			log.Printf("Processing legacy filter key: %s", key)
 			// Split field and operator from suffix
 			if strings.Contains(key, "_") {
 				parts := strings.SplitN(key, "_", 2)
@@ -97,7 +93,6 @@ func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
 				key = fmt.Sprintf("%s[%s]", filterPrefix, key)
 			}
 		} else if !strings.HasPrefix(key, filterPrefix) {
-			log.Printf("Skipping non-filter key: %s", key)
 			continue
 		}
 
@@ -133,9 +128,7 @@ func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
 		currentNestedMap[finalKey] = values
 	}
 
-	log.Printf("Built filter map structure: %+v", filterMap)
 	filters, err := p.buildFilters(filterMap)
-	log.Printf("Parsed %d filters with error: %v", len(filters), err)
 	return filters, err
 }
 
@@ -160,7 +153,6 @@ func parseSegments(path string) []string {
 }
 
 func (p *QueryParamParser) buildFilters(data any) ([]filter.CrudFilter, error) {
-	log.Printf("Building filters from data type: %T", data)
 	switch v := data.(type) {
 	case map[string]any:
 		return p.buildFromMap(v)
@@ -173,10 +165,8 @@ func (p *QueryParamParser) buildFilters(data any) ([]filter.CrudFilter, error) {
 
 func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, error) {
 	var filters []filter.CrudFilter
-	log.Printf("Building from map with %d keys", len(m))
 
 	for key, value := range m {
-		log.Printf("Processing map key: %s (value type: %T)", key, value)
 		switch key {
 		case "and", "or", "not":
 			// Handle nested conditional filters that might be wrapped in arrays
@@ -330,9 +320,7 @@ func isNumericType(val any) (isNumeric bool, typeName string) {
 // - Array values for IN/NIN/BETWEEN operators
 // Returns formatted LogicalFilter or error if validation fails
 func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.CrudFilter, error) {
-	log.Printf("Building logical filter for field: %q, raw value type: %T, raw value: %+v", field, value, value)
 	if field == "" {
-		log.Printf("Rejecting filter with empty field name.")
 		return nil, fmt.Errorf("field name cannot be empty")
 	}
 
@@ -361,11 +349,9 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 		operator = filter.OpEq
 		rawValForOpProcessing = value
 	}
-	log.Printf("Operator: %s, rawValForOpProcessing type: %T, value: %+v", operator, rawValForOpProcessing, rawValForOpProcessing)
 
 	if opIsMultiValue(operator) {
 		if rvs, ok := rawValForOpProcessing.([]string); ok && len(rvs) == 1 && strings.Contains(rvs[0], ",") {
-			log.Printf("Splitting comma-separated value for %s: %s", operator, rvs[0])
 			rawValForOpProcessing = strings.Split(rvs[0], ",")
 		}
 	}
@@ -485,7 +471,6 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 		}
 	}
 
-	log.Printf("Built logical filter - Field: %s, Operator: %s, Value: <%+v> (Type: %T)", field, operator, parsedVal, parsedVal)
 	return &filter.LogicalFilter{
 		Field:    field,
 		Operator: operator,

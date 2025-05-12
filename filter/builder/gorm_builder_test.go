@@ -2,20 +2,15 @@ package builder
 
 import (
 	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm/logger"
-	"log"
-	"os"
-	"testing"
-	"time"
-
 	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"testing"
 )
 
 func TestGORMBuilder_ApplyFilters(t *testing.T) {
 	type User struct {
-		ID    uint
+		ID      uint
 		Name    string
 		Email   string
 		Bio     string
@@ -24,23 +19,8 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 		Deleted bool
 	}
 
-	// Setup test DB
-	// Create new logger with configuration
-	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
-		logger.Config{
-			SlowThreshold:             time.Second, // Slow SQL threshold
-			LogLevel:                  logger.Info, // Log level
-			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound
-			ParameterizedQueries:      true,        // Don't include params
-			Colorful:                  false,       // Disable color
-		},
-	)
-
 	// Open database connection with logger
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
-		Logger: newLogger,
-	})
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"))
 	if err != nil {
 		t.Fatal(err)
 	}
