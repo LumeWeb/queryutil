@@ -17,6 +17,34 @@ type (
 	Pagination         = filter.Pagination
 	PaginationError    = filter.PaginationError
 	Filter             = filter.CrudFilter
+	Operator           = filter.Operator
+	OpEq               = filter.OpEq
+	OpNe               = filter.OpNe
+	OpLt               = filter.OpLt
+	OpGt               = filter.OpGt
+	OpLte              = filter.OpLte
+	OpGte              = filter.OpGte
+	OpContains         = filter.OpContains
+	OpContainss        = filter.OpContainss
+	OpNcontains        = filter.OpNcontains
+	OpNcontainss       = filter.OpNcontainss
+	OpIn               = filter.OpIn
+	OpNin              = filter.OpNin
+	OpIna              = filter.OpIna
+	OpNina             = filter.OpNina
+	OpBetween          = filter.OpBetween
+	OpNbetween         = filter.OpNbetween
+	OpNull             = filter.OpNull
+	OpNnull            = filter.OpNnull
+	OpStartswith       = filter.OpStartswith
+	OpStartswiths      = filter.OpStartswiths
+	OpNstartswith      = filter.OpNstartswith
+	OpNstartswiths     = filter.OpNstartswiths
+	OpEndswith         = filter.OpEndswith
+	OpEndswiths        = filter.OpEndswiths
+	OpNendswith        = filter.OpNendswith
+	OpNendswiths       = filter.OpNendswiths
+	OperatorMap        = filter.OperatorMap
 )
 
 // QueryBuilder defines the interface for building query clauses
