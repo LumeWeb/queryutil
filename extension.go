@@ -31,7 +31,7 @@ import "go.lumeweb.com/queryutil/filter"
 //	    err := query.Find(&users).Error
 //	    return users, total, err
 //	}
-type EntityFunc[T any] func([]Filter, []Sort, Pagination) ([]T, int64, error)
+type EntityFunc[T any] func([]CrudFilter, []Sort, Pagination) ([]T, int64, error)
 
 // ParseFromCustomSource allows using queryutil with custom request sources
 // by accepting any implementation of the RequestParser interface.

@@ -6,7 +6,7 @@ import (
 )
 
 // ApplyFilters applies filters to a GORM query using the global search configuration
-func ApplyFilters(tx *gorm.DB, filters []Filter, searchConfig *GlobalSearchConfig) *gorm.DB {
+func ApplyFilters(tx *gorm.DB, filters []CrudFilter, searchConfig *GlobalSearchConfig) *gorm.DB {
 	b := builder.NewGORMBuilder(tx, searchConfig)
 	result, _ := b.Apply(tx, filters)
 	return result

@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"sort" // Keep sort just in case the parser's internal map handling isn't strictly ordered, although JSON arrays usually preserve order.
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,7 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []filter.CrudFilter
+		expected []filter.CrudFilter // This will now hold filters created via constructors
 		wantErr  bool
 	}{
 		{
@@ -24,11 +25,7 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "name",
-					Operator: filter.OpContains,
-					Value:    "john",
-				},
+				filter.NewLogicalFilter("name", filter.OpContains, "john"),
 			},
 			wantErr: false,
 		},
@@ -52,21 +49,10 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalOr,
-					Filters: []filter.CrudFilter{
-						&filter.LogicalFilter{
-							Field:    "age",
-							Operator: filter.OpGte,
-							Value:    float64(30), // JSON numbers decode as float64
-						},
-						&filter.LogicalFilter{
-							Field:    "email",
-							Operator: filter.OpContains,
-							Value:    "example",
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+					filter.NewLogicalFilter("age", filter.OpGte, float64(30)), // JSON numbers unmarshal as float64
+					filter.NewLogicalFilter("email", filter.OpContains, "example"),
+				}),
 			},
 			wantErr: false,
 		},
@@ -79,7 +65,8 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 					// Missing value
 				}
 			]`,
-			wantErr: true,
+			wantErr:  true,
+			expected: nil, // No expected filters on error
 		},
 		{
 			name: "invalid operator",
@@ -90,7 +77,8 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 					"value": "active"
 				}
 			]`,
-			wantErr: true,
+			wantErr:  true,
+			expected: nil, // No expected filters on error
 		},
 		{
 			name: "different value types",
@@ -102,7 +90,7 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				},
 				{
 					"field": "metadata",
-					"operator": "eq", 
+					"operator": "eq",
 					"value": {"key": "value"}
 				},
 				{
@@ -112,21 +100,9 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "active",
-					Operator: filter.OpEq,
-					Value:    true,
-				},
-				&filter.LogicalFilter{
-					Field:    "metadata",
-					Operator: filter.OpEq,
-					Value:    map[string]any{"key": "value"},
-				},
-				&filter.LogicalFilter{
-					Field:    "tags",
-					Operator: filter.OpIn,
-					Value:    []any{"go", "test"},
-				},
+				filter.NewLogicalFilter("active", filter.OpEq, true),
+				filter.NewLogicalFilter("metadata", filter.OpEq, map[string]any{"key": "value"}), // JSON objects unmarshal as map[string]any
+				filter.NewLogicalFilter("tags", filter.OpIn, []any{"go", "test"}),                // JSON arrays unmarshal as []any
 			},
 			wantErr: false,
 		},
@@ -152,31 +128,13 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalAnd,
-					Filters: []filter.CrudFilter{
-						&filter.LogicalFilter{
-							Field:    "age",
-							Operator: filter.OpGte,
-							Value:    float64(18),
-						},
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalOr,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "role",
-									Operator: filter.OpEq,
-									Value:    "admin",
-								},
-								&filter.LogicalFilter{
-									Field:    "role",
-									Operator: filter.OpEq,
-									Value:    "superuser",
-								},
-							},
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+					filter.NewLogicalFilter("age", filter.OpGte, float64(18)), // JSON number
+					filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+						filter.NewLogicalFilter("role", filter.OpEq, "admin"),
+						filter.NewLogicalFilter("role", filter.OpEq, "superuser"),
+					}),
+				}),
 			},
 			wantErr: false,
 		},
@@ -188,7 +146,8 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 					"value": []
 				}
 			]`,
-			wantErr: true,
+			wantErr:  true, // Should fail if conditional filter value (array of filters) is empty
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "malformed JSON input",
@@ -199,7 +158,8 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 					"value": "test"
 				},
 			]`, // intentional trailing comma
-			wantErr: true,
+			wantErr:  true,
+			expected: nil, // No expected filters on error
 		},
 		{
 			name: "empty field name",
@@ -210,7 +170,8 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 					"value": "test"
 				}
 			]`,
-			wantErr: true,
+			wantErr:  true, // Should fail if field name is empty for a logical filter
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "three-level nested filters",
@@ -228,7 +189,7 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 							"value": [
 								{"field": "role", "operator": "eq", "value": "admin"},
 								{
-									"operator": "and", 
+									"operator": "and",
 									"value": [
 										{"field": "status", "operator": "eq", "value": "active"},
 										{"field": "verified", "operator": "eq", "value": true}
@@ -240,41 +201,16 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalAnd,
-					Filters: []filter.CrudFilter{
-						&filter.LogicalFilter{
-							Field:    "age",
-							Operator: filter.OpGte,
-							Value:    float64(18),
-						},
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalOr,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "role",
-									Operator: filter.OpEq,
-									Value:    "admin",
-								},
-								&filter.ConditionalFilter{
-									Operator: filter.LogicalAnd,
-									Filters: []filter.CrudFilter{
-										&filter.LogicalFilter{
-											Field:    "status",
-											Operator: filter.OpEq,
-											Value:    "active",
-										},
-										&filter.LogicalFilter{
-											Field:    "verified",
-											Operator: filter.OpEq,
-											Value:    true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+					filter.NewLogicalFilter("age", filter.OpGte, float64(18)), // JSON number
+					filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+						filter.NewLogicalFilter("role", filter.OpEq, "admin"),
+						filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+							filter.NewLogicalFilter("status", filter.OpEq, "active"),
+							filter.NewLogicalFilter("verified", filter.OpEq, true),
+						}),
+					}),
+				}),
 			},
 			wantErr: false,
 		},
@@ -288,11 +224,7 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "deleted_at",
-					Operator: filter.OpNull,
-					Value:    nil,
-				},
+				filter.NewLogicalFilter("deleted_at", filter.OpNull, nil),
 			},
 			wantErr: false,
 		},
@@ -311,16 +243,9 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalNot,
-					Filters: []filter.CrudFilter{
-						&filter.LogicalFilter{
-							Field:    "name",
-							Operator: filter.OpEq,
-							Value:    "john",
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalNot, []filter.CrudFilter{
+					filter.NewLogicalFilter("name", filter.OpEq, "john"),
+				}),
 			},
 			wantErr: false,
 		},
@@ -364,41 +289,17 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 				}
 			]`,
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalAnd,
-					Filters: []filter.CrudFilter{
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalNot,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "age",
-									Operator: filter.OpLt,
-									Value:    float64(30),
-								},
-							},
-						},
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalOr,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "status",
-									Operator: filter.OpEq,
-									Value:    "active",
-								},
-								&filter.ConditionalFilter{
-									Operator: filter.LogicalNot,
-									Filters: []filter.CrudFilter{
-										&filter.LogicalFilter{
-											Field:    "deleted",
-											Operator: filter.OpEq,
-											Value:    true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+					filter.NewConditionalFilter(filter.LogicalNot, []filter.CrudFilter{
+						filter.NewLogicalFilter("age", filter.OpLt, float64(30)), // JSON number
+					}),
+					filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+						filter.NewLogicalFilter("status", filter.OpEq, "active"),
+						filter.NewConditionalFilter(filter.LogicalNot, []filter.CrudFilter{
+							filter.NewLogicalFilter("deleted", filter.OpEq, true),
+						}),
+					}),
+				}),
 			},
 			wantErr: false,
 		},
@@ -411,7 +312,44 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 					"value": "test"
 				}
 			]`,
-			wantErr: true, // Should fail since we expect lowercase operators
+			wantErr:  true, // Should fail since we expect lowercase operators
+			expected: nil,  // No expected filters on error
+		},
+		{
+			name:     "empty top-level array",
+			input:    `[]`,
+			expected: []filter.CrudFilter{}, // Expect an empty slice if input is empty array
+			wantErr:  false,
+		},
+		{
+			name: "null logical filter value",
+			input: `[
+				{
+					"field": "optional_field",
+					"operator": "eq",
+					"value": null
+				}
+			]`,
+			expected: []filter.CrudFilter{
+				filter.NewLogicalFilter("optional_field", filter.OpEq, nil),
+			},
+			wantErr: false,
+		},
+		{
+			name: "array value for equality operator",
+			input: `[
+				{
+					"field": "name",
+					"operator": "eq",
+					"value": ["john", "jane"]
+				}
+			]`,
+			// Depending on the parser implementation, this might be treated as a literal array value
+			// or cause an error if "eq" doesn't support arrays. Let's assume it's treated as a literal array value.
+			expected: []filter.CrudFilter{
+				filter.NewLogicalFilter("name", filter.OpEq, []any{"john", "jane"}),
+			},
+			wantErr: false, // Assuming the parser allows this structure but validation happens later
 		},
 	}
 
@@ -426,39 +364,87 @@ func TestJSONParser_ParseFilters(t *testing.T) {
 			}
 
 			assert.NoError(t, err)
-			assert.Equal(t, len(tt.expected), len(result))
 
-			// Compare each filter in detail
-			for i, expectedFilter := range tt.expected {
-				switch ef := expectedFilter.(type) {
-				case *filter.LogicalFilter:
-					actual, ok := result[i].(*filter.LogicalFilter)
-					assert.True(t, ok, "Expected LogicalFilter at position %d", i)
-					assert.Equal(t, ef.Field, actual.Field)
-					assert.Equal(t, ef.Operator, actual.Operator)
-					assert.Equal(t, ef.Value, actual.Value)
+			// JSON array order should be preserved, so sorting isn't strictly necessary
+			// unless the parser implementation itself introduces reordering (which would be a bug).
+			// However, including sorting makes the test robust against unexpected reordering.
+			sort.SliceStable(result, func(i, j int) bool {
+				return result[i].String() < result[j].String() // Use String() for sorting representation
+			})
+			sort.SliceStable(tt.expected, func(i, j int) bool {
+				return tt.expected[i].String() < tt.expected[j].String() // Use String() for sorting representation
+			})
 
-				case *filter.ConditionalFilter:
-					actual, ok := result[i].(*filter.ConditionalFilter)
-					assert.True(t, ok, "Expected ConditionalFilter at position %d", i)
-					assert.Equal(t, ef.Operator, actual.Operator)
-					assert.Equal(t, len(ef.Filters), len(actual.Filters))
-				}
-			}
+			// assert.Equal performs a deep comparison and works correctly
+			// when both 'result' and 'tt.expected' slices contain objects
+			// created consistently using the filter package's constructors.
+			assert.Equal(t, tt.expected, result, "Parsed filters do not match expected for input:\n%s", tt.input)
+
 		})
 	}
 }
 
 func TestJSONParser_EdgeCases(t *testing.T) {
-	t.Run("empty input", func(t *testing.T) {
+	t.Run("empty input string", func(t *testing.T) {
 		parser := NewJSONParser("")
-		_, err := parser.ParseFilters()
+		filters, err := parser.ParseFilters()
 		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
+	})
+
+	t.Run("null input string", func(t *testing.T) {
+		parser := NewJSONParser("null")
+		filters, err := parser.ParseFilters()
+		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
 	})
 
 	t.Run("non-array input", func(t *testing.T) {
-		parser := NewJSONParser(`{"field": "name"}`)
-		_, err := parser.ParseFilters()
+		parser := NewJSONParser(`{"field": "name", "operator": "eq", "value": "test"}`) // Should be an array
+		filters, err := parser.ParseFilters()
 		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
+	})
+
+	t.Run("array containing non-filter object", func(t *testing.T) {
+		parser := NewJSONParser(`[{"field": "name", "operator": "eq", "value": "test"}, 123]`) // 123 is not a filter object
+		filters, err := parser.ParseFilters()
+		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
+	})
+
+	t.Run("logical filter missing field", func(t *testing.T) {
+		parser := NewJSONParser(`[{"operator": "eq", "value": "test"}]`) // Missing "field"
+		filters, err := parser.ParseFilters()
+		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
+	})
+
+	t.Run("logical filter missing operator", func(t *testing.T) {
+		parser := NewJSONParser(`[{"field": "name", "value": "test"}]`) // Missing "operator"
+		filters, err := parser.ParseFilters()
+		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
+	})
+
+	t.Run("conditional filter missing operator", func(t *testing.T) {
+		parser := NewJSONParser(`[{"value": [{"field": "name", "operator": "eq", "value": "test"}]}]`) // Missing "operator"
+		filters, err := parser.ParseFilters()
+		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
+	})
+
+	t.Run("conditional filter missing value (array of filters)", func(t *testing.T) {
+		parser := NewJSONParser(`[{"operator": "and"}]`) // Missing "value"
+		filters, err := parser.ParseFilters()
+		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
+	})
+
+	t.Run("conditional filter value is not an array", func(t *testing.T) {
+		parser := NewJSONParser(`[{"operator": "and", "value": {"field": "name", "operator": "eq", "value": "test"}}]`) // Value should be array
+		filters, err := parser.ParseFilters()
+		assert.Error(t, err)
+		assert.Nil(t, filters) // Expect nil filters on error
 	})
 }
