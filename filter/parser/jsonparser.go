@@ -37,142 +37,116 @@ func (p *JSONParser) ParseFilters() ([]filter.CrudFilter, error) {
 
 	var filters []filter.CrudFilter
 	var rawFilters []json.RawMessage
-
 	// First parse into raw messages to preserve nested structure
 	if err := json.Unmarshal([]byte(rawJSON), &rawFilters); err != nil {
-		return nil, fmt.Errorf("invalid JSON format: %w", err)
+		return nil, fmt.Errorf("invalid JSON format (must be a array): %w", err)
 	}
 
+	// Handle null input by checking if rawFilters is nil
+	if rawFilters == nil {
+		return nil, filter.NewFilterError("", "input must be a JSON array")
+	}
+
+	// Initialize the result slice as non-nil, potentially with capacity
+	filters = make([]filter.CrudFilter, 0, len(rawFilters))
+
 	for _, rf := range rawFilters {
-		lf := &filter.LogicalFilter{}
-		if err := json.Unmarshal(rf, lf); err == nil && lf.Field != "" {
-			// Validate operator
-			if _, err := filter.ParseOperator(string(lf.Operator)); err != nil {
-				return nil, fmt.Errorf("invalid operator %q: %w", lf.Operator, err)
-			}
-			filters = append(filters, lf)
-			continue
+		// Delegate parsing each top-level raw message to the helper function
+		f, err := parseFilterFromRaw(rf)
+		if err != nil {
+			return nil, err // Propagate parsing errors
 		}
-
-		// Try conditional filter
-		var cfStruct struct {
-			Operator filter.LogicalOperator `json:"operator"`
-			Value    []json.RawMessage      `json:"value"`
-		}
-		if err := json.Unmarshal(rf, &cfStruct); err == nil &&
-			(cfStruct.Operator == filter.LogicalAnd || cfStruct.Operator == filter.LogicalOr || cfStruct.Operator == filter.LogicalNot) {
-			// Validate nested filters
-			if len(cfStruct.Value) == 0 {
-				return nil, fmt.Errorf("conditional filter must have nested filters")
-			}
-
-			// Parse nested filters
-			var nestedFilters []filter.CrudFilter
-			for _, nestedRF := range cfStruct.Value {
-				nf, err := parseFilter(nestedRF)
-				if err != nil {
-					return nil, err
-				}
-				nestedFilters = append(nestedFilters, nf)
-			}
-
-			cf := &filter.ConditionalFilter{
-				Operator: cfStruct.Operator,
-				Filters:  nestedFilters,
-			}
-			if err != nil {
-				return nil, err
-			}
-			cf.Filters = nestedFilters
-			filters = append(filters, cf)
-			continue
-		}
-
-		return nil, fmt.Errorf("invalid filter structure: %v", string(rf))
+		filters = append(filters, f)
 	}
 
 	return filters, nil
 }
 
-func validateValueForOperator(op filter.Operator, value any) error {
-	switch op {
-	case filter.OpNull, filter.OpNnull:
-		if value != nil {
-			return fmt.Errorf("operator %q requires null value", op)
-		}
-	case filter.OpBetween, filter.OpNbetween:
-		if vals, ok := value.([]any); !ok || len(vals) != 2 {
-			return fmt.Errorf("operator %q requires array with exactly 2 values", op)
-		}
-	case filter.OpIn, filter.OpNin, filter.OpIna, filter.OpNina:
-		if _, ok := value.([]any); !ok {
-			return fmt.Errorf("operator %q requires array value", op)
-		}
-	}
-	return nil
-}
 
-func parseFilter(rf json.RawMessage) (filter.CrudFilter, error) {
-	// Try logical filter first
-	lf := &filter.LogicalFilter{}
-	if err := json.Unmarshal(rf, lf); err == nil && lf.Field != "" {
-		if _, err := filter.ParseOperator(string(lf.Operator)); err != nil {
-			return nil, fmt.Errorf("invalid operator %q: %w", lf.Operator, err)
-		}
 
-		// Validate value type for operator
-		if err := validateValueForOperator(lf.Operator, lf.Value); err != nil {
-			return nil, fmt.Errorf("invalid value for operator %q: %w", lf.Operator, err)
-		}
-		return lf, nil
+func parseFilterFromRaw(rf json.RawMessage) (filter.CrudFilter, error) {
+	var raw map[string]any
+	if err := json.Unmarshal(rf, &raw); err != nil {
+		return nil, filter.NewFilterError("", fmt.Sprintf("invalid JSON object structure: %v", err))
 	}
 
-	// Try conditional filter
-	var cfStruct struct {
-		Operator filter.LogicalOperator `json:"operator"`
-		Value    []json.RawMessage      `json:"value"`
-	}
-	if err := json.Unmarshal(rf, &cfStruct); err == nil &&
-		(cfStruct.Operator == filter.LogicalAnd || cfStruct.Operator == filter.LogicalOr || cfStruct.Operator == filter.LogicalNot) {
-		if len(cfStruct.Value) == 0 {
-			return nil, fmt.Errorf("conditional filter must have nested filters")
+	// Check if it's a conditional filter first (operator and value keys)
+	operatorVal, okOperator := raw["operator"]
+	valueVal, okValue := raw["value"]
+	fieldVal, okField := raw["field"]
+
+	if okOperator && okValue && !okField {
+		// Looks like a conditional filter
+		opStr, ok := operatorVal.(string)
+		if !ok {
+			return nil, filter.NewFilterError("operator", "must be a string")
+		}
+		op := filter.LogicalOperator(opStr)
+		if op != filter.LogicalAnd && op != filter.LogicalOr && op != filter.LogicalNot {
+			return nil, filter.NewFilterError("operator", fmt.Sprintf("invalid logical operator %q", opStr))
+		}
+
+		// For conditional filter, 'value' is expected to be an array of filter objects
+		valueArr, ok := valueVal.([]any)
+		if !ok {
+			return nil, filter.NewFilterError("value", "must be an array of filters")
+		}
+
+		if len(valueArr) == 0 && (op == filter.LogicalAnd || op == filter.LogicalOr) {
+			return nil, filter.NewFilterError(string(op), "conditional filter must have nested filters")
+		}
+
+		if op == filter.LogicalNot && len(valueArr) != 1 {
+			return nil, filter.NewFilterError(string(op), "NOT operator requires exactly one nested filter")
 		}
 
 		var nestedFilters []filter.CrudFilter
-		for _, nestedRF := range cfStruct.Value {
-			nf, err := parseFilter(nestedRF)
+		for _, item := range valueArr {
+			nestedRF, err := json.Marshal(item)
+			if err != nil {
+				return nil, filter.NewFilterError("", fmt.Sprintf("internal error: failed to re-marshal nested filter: %v", err))
+			}
+			nf, err := parseFilterFromRaw(nestedRF)
 			if err != nil {
 				return nil, err
 			}
 			nestedFilters = append(nestedFilters, nf)
 		}
 
-		return &filter.ConditionalFilter{
-			Operator: cfStruct.Operator,
-			Filters:  nestedFilters,
-		}, nil
-	}
+		return filter.NewConditionalFilter(op, nestedFilters), nil
 
-	return nil, fmt.Errorf("invalid filter structure: %v", string(rf))
-}
-
-func (p *JSONParser) ParseNested(rawFilters []filter.CrudFilter) ([]filter.CrudFilter, error) {
-	var nested []filter.CrudFilter
-	for _, f := range rawFilters {
-		switch v := f.(type) {
-		case *filter.LogicalFilter:
-			nested = append(nested, v)
-		case *filter.ConditionalFilter:
-			cf := *v
-			children, err := p.ParseNested(cf.Filters)
-			if err != nil {
-				return nil, err
-			}
-			cf.Filters = children
-			nested = append(nested, &cf)
-		default:
-			return nil, fmt.Errorf("unknown filter type: %T", f)
+	} else if okField && okOperator {
+		// Looks like a logical filter (must have field and operator)
+		fieldStr, ok := fieldVal.(string)
+		if !ok || fieldStr == "" {
+			return nil, filter.NewFilterError("field", "must be a non-empty string")
 		}
+
+		opStr, ok := operatorVal.(string)
+		if !ok {
+			return nil, filter.NewFilterError("operator", "must be a string")
+		}
+		op, err := filter.ParseOperator(opStr)
+		if err != nil {
+			return nil, filter.NewFilterError("operator", err.Error())
+		}
+
+		var lf filter.CrudFilter
+		defer func() {
+			if r := recover(); r != nil {
+				err = filter.NewFilterError(fieldStr, fmt.Sprintf("value validation failed for operator '%s': %v", opStr, r))
+				lf = nil
+			}
+		}()
+
+		lf = filter.NewLogicalFilter(fieldStr, op, valueVal)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return lf, nil
 	}
-	return nested, nil
+
+	return nil, filter.NewFilterError("", fmt.Sprintf("invalid filter structure: %v", string(rf)))
 }

@@ -8,7 +8,7 @@ import (
 
 // ParseRequestHTTP parses query parameters from an http.Request.
 // Maintained for backward compatibility
-func ParseRequestHTTP(r *http.Request) ([]queryutil.Filter, []queryutil.Sort, queryutil.Pagination, error) {
+func ParseRequestHTTP(r *http.Request) ([]queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination, error) {
 	// Use the query param parser directly with the query values
 	p := parser.NewQueryParamParser(r.URL.Query())
 	return queryutil.ParseFromSource(p)
@@ -16,7 +16,7 @@ func ParseRequestHTTP(r *http.Request) ([]queryutil.Filter, []queryutil.Sort, qu
 
 // ParseRequestWithSearchHTTP parses query parameters with global search support
 // Deprecated: Use ParseFromSource with a custom parser instead
-func ParseRequestWithSearchHTTP(r *http.Request, searchConfig *queryutil.GlobalSearchConfig) ([]queryutil.Filter, []queryutil.Sort, queryutil.Pagination, error) {
+func ParseRequestWithSearchHTTP(r *http.Request, searchConfig *queryutil.GlobalSearchConfig) ([]queryutil.CrudFilter, []queryutil.Sort, queryutil.Pagination, error) {
 	return queryutil.ParseQueryWithSearch(r.URL.Query(), searchConfig)
 }
 

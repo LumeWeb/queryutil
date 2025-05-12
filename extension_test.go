@@ -10,7 +10,7 @@ import (
 func TestParseFromCustomSource(t *testing.T) {
 	mockParser := parser.NewMockParser(t)
 	mockParser.EXPECT().ParseFilters().Return([]filter.CrudFilter{
-		&filter.LogicalFilter{Field: "name", Operator: filter.OpEq, Value: "test"},
+		NewLogicalFilter("name", filter.OpEq, "test"),
 	}, nil)
 	mockParser.EXPECT().ParseSorts((*filter.SortConfig)(nil)).Return([]filter.Sort{
 		{Field: "name", Order: filter.OrderAsc},
@@ -26,7 +26,7 @@ func TestParseFromCustomSource(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Len(t, filters, 1)
-	assert.Equal(t, "name", filters[0].(*filter.LogicalFilter).Field)
+	assert.Equal(t, "name", filters[0].GetField())
 	assert.Len(t, sorts, 1)
 	assert.Equal(t, "name", sorts[0].Field)
 	assert.Equal(t, 0, pagination.Start)

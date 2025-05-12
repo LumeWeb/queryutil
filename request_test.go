@@ -14,7 +14,7 @@ func TestParseQuery(t *testing.T) {
 	tests := []struct {
 		name           string
 		query          url.Values
-		wantFilters    []Filter
+		wantFilters    []CrudFilter
 		wantSorts      []Sort
 		wantPagination Pagination
 		wantErr        bool
@@ -29,9 +29,9 @@ func TestParseQuery(t *testing.T) {
 				"_start":  []string{"0"},
 				"_end":    []string{"10"},
 			},
-			wantFilters: []filter.CrudFilter{
-				&filter.LogicalFilter{Field: "name", Operator: filter.OpEq, Value: "john"},
-				&filter.LogicalFilter{Field: "age", Operator: filter.OpGte, Value: 20},
+			wantFilters: []CrudFilter{
+				NewLogicalFilter("name", filter.OpEq, "john"),
+				NewLogicalFilter("age", filter.OpGte, 20),
 			},
 			wantSorts: []filter.Sort{
 				{Field: "name", Order: filter.OrderDesc},
@@ -67,10 +67,10 @@ func TestParseQuery(t *testing.T) {
 			assert.NoError(t, err)
 			// Sort both slices by Field to make comparison order-independent
 			sort.Slice(filters, func(i, j int) bool {
-				return filters[i].(*filter.LogicalFilter).Field < filters[j].(*filter.LogicalFilter).Field
+				return filters[i].GetField() < filters[j].GetField()
 			})
 			sort.Slice(tt.wantFilters, func(i, j int) bool {
-				return tt.wantFilters[i].(*filter.LogicalFilter).Field < tt.wantFilters[j].(*filter.LogicalFilter).Field
+				return tt.wantFilters[i].GetField() < tt.wantFilters[j].GetField()
 			})
 			assert.Equal(t, tt.wantFilters, filters)
 			assert.Equal(t, tt.wantSorts, sorts)
@@ -83,7 +83,7 @@ func TestParseRequest(t *testing.T) {
 	tests := []struct {
 		name           string
 		query          url.Values
-		wantFilters    []Filter
+		wantFilters    []CrudFilter
 		wantSorts      []Sort
 		wantPagination Pagination
 		wantErr        bool
@@ -98,9 +98,9 @@ func TestParseRequest(t *testing.T) {
 				"_start":  []string{"0"},
 				"_end":    []string{"10"},
 			},
-			wantFilters: []filter.CrudFilter{
-				&filter.LogicalFilter{Field: "name", Operator: filter.OpEq, Value: "john"},
-				&filter.LogicalFilter{Field: "age", Operator: filter.OpGte, Value: 20},
+			wantFilters: []CrudFilter{
+				filter.NewLogicalFilter("name", filter.OpEq, "john"),
+				filter.NewLogicalFilter("age", filter.OpGte, 20),
 			},
 			wantSorts: []filter.Sort{
 				{Field: "name", Order: filter.OrderDesc},
@@ -130,10 +130,10 @@ func TestParseRequest(t *testing.T) {
 			assert.NoError(t, err)
 			// Sort both slices by Field to make comparison order-independent
 			sort.Slice(filters, func(i, j int) bool {
-				return filters[i].(*filter.LogicalFilter).Field < filters[j].(*filter.LogicalFilter).Field
+				return filters[i].GetField() < filters[j].GetField()
 			})
 			sort.Slice(tt.wantFilters, func(i, j int) bool {
-				return tt.wantFilters[i].(*filter.LogicalFilter).Field < tt.wantFilters[j].(*filter.LogicalFilter).Field
+				return tt.wantFilters[i].GetField() < tt.wantFilters[j].GetField()
 			})
 			assert.Equal(t, tt.wantFilters, filters)
 			assert.Equal(t, tt.wantSorts, sorts)

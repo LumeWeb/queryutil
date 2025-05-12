@@ -1,10 +1,13 @@
 module go.lumeweb.com/queryutil
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.7
 
 require (
 	github.com/samber/lo v1.49.1
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	gorm.io/driver/sqlite v1.5.7
 	gorm.io/gorm v1.25.12
 )

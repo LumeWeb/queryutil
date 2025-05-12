@@ -3,6 +3,7 @@ package filter
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/samber/lo"
 )
@@ -29,6 +30,8 @@ type CrudFilter interface {
 	GetField() string
 	// GetFilters returns nested filters for conditional types (empty for logical filters)
 	GetFilters() []CrudFilter
+	// String returns a human-readable representation of the filter
+	String() string
 }
 
 // Clause represents a compiled filter expression ready for execution
@@ -47,9 +50,34 @@ const (
 
 // LogicalFilter represents a direct field comparison condition
 type LogicalFilter struct {
-	Field    string   `json:"field"`    // Field name to filter on
-	Operator Operator `json:"operator"` // Comparison operator
-	Value    any      `json:"value"`    // Value to compare against
+	field    string   // Field name to filter on
+	operator Operator // Comparison operator
+	value    any      // Value to compare against
+}
+
+// NewLogicalFilter creates a validated LogicalFilter with immutable values
+func NewLogicalFilter(field string, operator Operator, value any) *LogicalFilter {
+	validateValue(operator, field, value)
+	return &LogicalFilter{
+		field:    field,
+		operator: operator,
+		value:    value,
+	}
+}
+
+// Value accessor provides read-only access to the value
+func (f *LogicalFilter) Value() any {
+	return f.value
+}
+
+// Field accessor provides read-only access to the field name
+func (f *LogicalFilter) Field() string {
+	return f.field
+}
+
+// Operator accessor provides read-only access to the operator
+func (f *LogicalFilter) Operator() Operator {
+	return f.operator
 }
 
 func (f *LogicalFilter) AcceptVisitor(v Visitor) (Clause, error) {
@@ -57,15 +85,19 @@ func (f *LogicalFilter) AcceptVisitor(v Visitor) (Clause, error) {
 }
 
 func (f *LogicalFilter) GetOperator() string {
-	return string(f.Operator)
+	return string(f.Operator())
 }
 
 func (f *LogicalFilter) GetField() string {
-	return f.Field
+	return f.Field()
 }
 
 func (f *LogicalFilter) GetFilters() []CrudFilter {
 	return nil
+}
+
+func (f *LogicalFilter) String() string {
+	return fmt.Sprintf("%s %s %v", f.Field(), f.Operator(), f.Value())
 }
 
 // ConditionalFilter groups multiple filters with boolean logic
@@ -96,6 +128,14 @@ func (f *ConditionalFilter) GetField() string {
 
 func (f *ConditionalFilter) GetFilters() []CrudFilter {
 	return f.Filters
+}
+
+func (f *ConditionalFilter) String() string {
+	subs := make([]string, len(f.Filters))
+	for i, sf := range f.Filters {
+		subs[i] = sf.String()
+	}
+	return fmt.Sprintf("%s( %s )", strings.ToUpper(string(f.Operator)), strings.Join(subs, ", "))
 }
 
 // GlobalSearchConfig defines settings for full-text search across multiple columns

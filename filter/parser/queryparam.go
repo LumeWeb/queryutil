@@ -269,7 +269,12 @@ func convertStringValue(value any) (any, error) {
 			return nil, fmt.Errorf("invalid boolean value %q; use 'true' or 'false' (case-sensitive)", v)
 		}
 
-		return v, nil // Default to string if no other conversion matches
+		// Decode any URL-encoded string value
+		decoded, err := url.QueryUnescape(v)
+		if err != nil {
+			return v, nil // Return original if unescaping fails
+		}
+		return decoded, nil // Return decoded value
 
 	case []string:
 		if len(v) == 0 {
@@ -471,11 +476,7 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 		}
 	}
 
-	return &filter.LogicalFilter{
-		Field:    field,
-		Operator: operator,
-		Value:    parsedVal,
-	}, nil
+	return filter.NewLogicalFilter(field, operator, parsedVal), nil
 }
 
 func (p *QueryParamParser) ParsePagination() (filter.Pagination, error) {

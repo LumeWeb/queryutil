@@ -13,7 +13,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 	tests := []struct {
 		name     string
 		query    map[string][]string
-		expected []filter.CrudFilter
+		expected []filter.CrudFilter // This will now hold filters created via constructors
 		wantErr  bool
 	}{
 		{
@@ -22,11 +22,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[name]": {"john"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "name",
-					Operator: filter.OpEq,
-					Value:    "john",
-				},
+				filter.NewLogicalFilter("name", filter.OpEq, "john"),
 			},
 			wantErr: false,
 		},
@@ -36,11 +32,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[age][ne]": {"20"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "age",
-					Operator: filter.OpNe,
-					Value:    20,
-				},
+				filter.NewLogicalFilter("age", filter.OpNe, 20),
 			},
 			wantErr: false,
 		},
@@ -50,11 +42,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[title][contains]": {"test"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "title",
-					Operator: filter.OpContains,
-					Value:    "test",
-				},
+				filter.NewLogicalFilter("title", filter.OpContains, "test"),
 			},
 			wantErr: false,
 		},
@@ -65,26 +53,12 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[or][0][and][1][age][gte]": {"30"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalOr,
-					Filters: []filter.CrudFilter{
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalAnd,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "name",
-									Operator: filter.OpEq,
-									Value:    "john",
-								},
-								&filter.LogicalFilter{
-									Field:    "age",
-									Operator: filter.OpGte,
-									Value:    30,
-								},
-							},
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+					filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+						filter.NewLogicalFilter("name", filter.OpEq, "john"),
+						filter.NewLogicalFilter("age", filter.OpGte, 30),
+					}),
+				}),
 			},
 			wantErr: false,
 		},
@@ -94,11 +68,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[q]": {"searchterm"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "q",
-					Operator: filter.OpEq,
-					Value:    "searchterm",
-				},
+				filter.NewLogicalFilter("q", filter.OpEq, "searchterm"),
 			},
 			wantErr: false,
 		},
@@ -108,7 +78,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[status][invalid]": {"value"},
 			},
 			wantErr:  true,
-			expected: []filter.CrudFilter{},
+			expected: nil, // No expected filters on error
 		},
 		{
 			name: "numeric value types",
@@ -117,16 +87,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[price][gte]": {"19.99"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "age",
-					Operator: filter.OpEq,
-					Value:    25,
-				},
-				&filter.LogicalFilter{
-					Field:    "price",
-					Operator: filter.OpGte,
-					Value:    19.99,
-				},
+				filter.NewLogicalFilter("age", filter.OpEq, 25),
+				filter.NewLogicalFilter("price", filter.OpGte, 19.99),
 			},
 			wantErr: false,
 		},
@@ -137,16 +99,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[vip][neq]":   {"false"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "active",
-					Operator: filter.OpEq,
-					Value:    true,
-				},
-				&filter.LogicalFilter{
-					Field:    "vip",
-					Operator: filter.OpNe,
-					Value:    false,
-				},
+				filter.NewLogicalFilter("active", filter.OpEq, true),
+				filter.NewLogicalFilter("vip", filter.OpNe, false),
 			},
 			wantErr: false,
 		},
@@ -158,36 +112,15 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[or][1][not][0][name][contains]": {"test"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalOr,
-					Filters: []filter.CrudFilter{
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalAnd,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "status",
-									Operator: filter.OpEq,
-									Value:    "active",
-								},
-								&filter.LogicalFilter{
-									Field:    "age",
-									Operator: filter.OpGte,
-									Value:    "18",
-								},
-							},
-						},
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalNot,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "name",
-									Operator: filter.OpContains,
-									Value:    "test",
-								},
-							},
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+					filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+						filter.NewLogicalFilter("status", filter.OpEq, "active"),
+						filter.NewLogicalFilter("age", filter.OpGte, 18), // Expected as number
+					}),
+					filter.NewConditionalFilter(filter.LogicalNot, []filter.CrudFilter{
+						filter.NewLogicalFilter("name", filter.OpContains, "test"),
+					}),
+				}),
 			},
 			wantErr: false,
 		},
@@ -204,66 +137,23 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[and][2][or][1][and][1][stock][gte]": {"10"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalAnd,
-					Filters: []filter.CrudFilter{
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalOr,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "category",
-									Operator: filter.OpEq,
-									Value:    "books",
-								},
-								&filter.LogicalFilter{
-									Field:    "category",
-									Operator: filter.OpEq,
-									Value:    "movies",
-								},
-							},
-						},
-						&filter.LogicalFilter{
-							Field:    "price",
-							Operator: filter.OpBetween,
-							Value:    []any{10, 50},
-						},
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalOr,
-							Filters: []filter.CrudFilter{
-								&filter.ConditionalFilter{
-									Operator: filter.LogicalAnd,
-									Filters: []filter.CrudFilter{
-										&filter.LogicalFilter{
-											Field:    "type",
-											Operator: filter.OpEq,
-											Value:    "digital",
-										},
-										&filter.LogicalFilter{
-											Field:    "stock",
-											Operator: filter.OpGte,
-											Value:    5,
-										},
-									},
-								},
-								&filter.ConditionalFilter{
-									Operator: filter.LogicalAnd,
-									Filters: []filter.CrudFilter{
-										&filter.LogicalFilter{
-											Field:    "type",
-											Operator: filter.OpEq,
-											Value:    "physical",
-										},
-										&filter.LogicalFilter{
-											Field:    "stock",
-											Operator: filter.OpGte,
-											Value:    10,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+					filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+						filter.NewLogicalFilter("category", filter.OpEq, "books"),
+						filter.NewLogicalFilter("category", filter.OpEq, "movies"),
+					}),
+					filter.NewLogicalFilter("price", filter.OpBetween, []any{10, 50}),
+					filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+						filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+							filter.NewLogicalFilter("type", filter.OpEq, "digital"),
+							filter.NewLogicalFilter("stock", filter.OpGte, 5),
+						}),
+						filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+							filter.NewLogicalFilter("type", filter.OpEq, "physical"),
+							filter.NewLogicalFilter("stock", filter.OpGte, 10),
+						}),
+					}),
+				}),
 			},
 			wantErr: false,
 		},
@@ -278,71 +168,31 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[and][2][and][1][rating][gte]":   {"4.5"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalAnd,
-					Filters: []filter.CrudFilter{
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalOr,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "author",
-									Operator: filter.OpEq,
-									Value:    "john",
-								},
-								&filter.LogicalFilter{
-									Field:    "author",
-									Operator: filter.OpEq,
-									Value:    "jane",
-								},
-							},
-						},
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalOr,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "year",
-									Operator: filter.OpGte,
-									Value:    2020,
-								},
-								&filter.LogicalFilter{
-									Field:    "year",
-									Operator: filter.OpLte,
-									Value:    1990,
-								},
-							},
-						},
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalAnd,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "available",
-									Operator: filter.OpEq,
-									Value:    true,
-								},
-								&filter.LogicalFilter{
-									Field:    "rating",
-									Operator: filter.OpGte,
-									Value:    4.5,
-								},
-							},
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+					filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+						filter.NewLogicalFilter("author", filter.OpEq, "john"),
+						filter.NewLogicalFilter("author", filter.OpEq, "jane"),
+					}),
+					filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+						filter.NewLogicalFilter("year", filter.OpGte, 2020),
+						filter.NewLogicalFilter("year", filter.OpLte, 1990),
+					}),
+					filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+						filter.NewLogicalFilter("available", filter.OpEq, true),
+						filter.NewLogicalFilter("rating", filter.OpGte, 4.5),
+					}),
+				}),
 			},
 			wantErr: false,
 		},
 		{
 			name: "empty string value for eq operator",
 			query: map[string][]string{
-				"filters[name][eq]": {""}, // Note the $eq
+				"filters[name][eq]": {""},
 			},
-			wantErr: false, // If $eq allows empty strings
+			wantErr: false,
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "name",
-					Operator: filter.OpEq,
-					Value:    "",
-				},
+				filter.NewLogicalFilter("name", filter.OpEq, ""),
 			},
 		},
 		{
@@ -350,7 +200,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[or][invalid][age][eq]": {"30"},
 			},
-			wantErr: true,
+			wantErr:  true,
+			expected: nil, // No expected filters on error
 		},
 		{
 			name: "null operator",
@@ -358,11 +209,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[deleted_at][null]": {""},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "deleted_at",
-					Operator: filter.OpNull,
-					Value:    nil,
-				},
+				filter.NewLogicalFilter("deleted_at", filter.OpNull, nil),
 			},
 			wantErr: false,
 		},
@@ -372,11 +219,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[updated_at][nnull]": {""},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "updated_at",
-					Operator: filter.OpNnull,
-					Value:    nil,
-				},
+				filter.NewLogicalFilter("updated_at", filter.OpNnull, nil),
 			},
 			wantErr: false,
 		},
@@ -386,11 +229,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[price][between]": {"10", "20"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "price",
-					Operator: filter.OpBetween,
-					Value:    []any{10, 20},
-				},
+				filter.NewLogicalFilter("price", filter.OpBetween, []any{10, 20}),
 			},
 			wantErr: false,
 		},
@@ -400,11 +239,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[id][in]": {"1", "2", "3"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "id",
-					Operator: filter.OpIn,
-					Value:    []any{1, 2, 3}, // EXPECT NUMBERS
-				},
+				filter.NewLogicalFilter("id", filter.OpIn, []any{1, 2, 3}), // EXPECT NUMBERS
 			},
 			wantErr: false,
 		},
@@ -413,13 +248,9 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[active][eq]": {"notaboolean"},
 			},
-			wantErr: false,
+			wantErr: false, // Should not error, treats as string if not standard bool/number
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "active",
-					Operator: filter.OpEq,
-					Value:    "notaboolean",
-				},
+				filter.NewLogicalFilter("active", filter.OpEq, "notaboolean"),
 			},
 		},
 		{
@@ -427,14 +258,16 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[name][EQ]": {"john"},
 			},
-			wantErr: true,
+			wantErr:  true,
+			expected: nil, // No expected filters on error
 		},
 		{
 			name: "empty filter key",
 			query: map[string][]string{
 				"filters[][eq]": {"value"},
 			},
-			wantErr: true,
+			wantErr:  true, // Should error on empty key
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "in-array operator with mixed values",
@@ -442,11 +275,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[tags][ina]": {"go", "123"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "tags",
-					Operator: filter.OpIna,
-					Value:    []any{"go", 123},
-				},
+				filter.NewLogicalFilter("tags", filter.OpIna, []any{"go", 123}), // Expect type conversion
 			},
 			wantErr: false,
 		},
@@ -456,7 +285,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[age][eq]": {"25"},
 				"filters[age][gt]": {"20"},
 			},
-			wantErr: true,
+			wantErr:  true, // Should error on ambiguous structure
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "reject nested object structure",
@@ -464,7 +294,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[user][name][eq]": {"john"},
 				"filters[user][age][gt]":  {"30"},
 			},
-			wantErr: true,
+			wantErr:  true, // Should error on non-flat field/operator structure
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "mixed conditional operators",
@@ -474,31 +305,13 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[or][1][name][contains]":     {"special"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.ConditionalFilter{
-					Operator: filter.LogicalOr,
-					Filters: []filter.CrudFilter{
-						&filter.ConditionalFilter{
-							Operator: filter.LogicalAnd,
-							Filters: []filter.CrudFilter{
-								&filter.LogicalFilter{
-									Field:    "status",
-									Operator: filter.OpEq,
-									Value:    "active",
-								},
-								&filter.LogicalFilter{
-									Field:    "price",
-									Operator: filter.OpLt,
-									Value:    100,
-								},
-							},
-						},
-						&filter.LogicalFilter{
-							Field:    "name",
-							Operator: filter.OpContains,
-							Value:    "special",
-						},
-					},
-				},
+				filter.NewConditionalFilter(filter.LogicalOr, []filter.CrudFilter{
+					filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{
+						filter.NewLogicalFilter("status", filter.OpEq, "active"),
+						filter.NewLogicalFilter("price", filter.OpLt, 100),
+					}),
+					filter.NewLogicalFilter("name", filter.OpContains, "special"),
+				}),
 			},
 			wantErr: false,
 		},
@@ -507,19 +320,17 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[id][in]": {},
 			},
-			wantErr: true,
+			wantErr:  true, // Should error if 'in' has no values
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "string with commas for in operator",
 			query: map[string][]string{
 				"filters[id][in]": {"1,2,3"},
 			},
+			// Assuming comma split and type conversion for 'in' operator
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "id",
-					Operator: filter.OpIn,
-					Value:    []any{1, 2, 3},
-				},
+				filter.NewLogicalFilter("id", filter.OpIn, []any{1, 2, 3}),
 			},
 			wantErr: false,
 		},
@@ -529,11 +340,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[age][eq]": {"0"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "age",
-					Operator: filter.OpEq,
-					Value:    0,
-				},
+				filter.NewLogicalFilter("age", filter.OpEq, 0), // Expected as number
 			},
 			wantErr: false,
 		},
@@ -544,16 +351,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[status][eq]":     {"active"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "name",
-					Operator: filter.OpContains,
-					Value:    "test",
-				},
-				&filter.LogicalFilter{
-					Field:    "status",
-					Operator: filter.OpEq,
-					Value:    "active",
-				},
+				filter.NewLogicalFilter("name", filter.OpContains, "test"),
+				filter.NewLogicalFilter("status", filter.OpEq, "active"),
 			},
 			wantErr: false,
 		},
@@ -563,11 +362,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[id][in]": {"1", "abc"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "id",
-					Operator: filter.OpIn,
-					Value:    []any{1, "abc"},
-				},
+				filter.NewLogicalFilter("id", filter.OpIn, []any{1, "abc"}), // Mixed types expected
 			},
 			wantErr: false,
 		},
@@ -576,21 +371,24 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[active][eq]": {"True"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error if only lowercase 'true'/'false' are supported
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "non-numeric between values",
 			query: map[string][]string{
 				"filters[price][between]": {"ten", "twenty"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error if conversion to number fails
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "nnull operator with value",
 			query: map[string][]string{
 				"filters[updated_at][nnull]": {"123"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error if nnull has a value
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "single value in array operator",
@@ -598,11 +396,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[category][in]": {"shoes"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "category",
-					Operator: filter.OpIn,
-					Value:    []any{"shoes"},
-				},
+				filter.NewLogicalFilter("category", filter.OpIn, []any{"shoes"}),
 			},
 			wantErr: false,
 		},
@@ -611,7 +405,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[age][eq]": {"30", "31"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error for multiple values for non-array operators
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "decimal value handling",
@@ -619,11 +414,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[rating][eq]": {"4.75"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "rating",
-					Operator: filter.OpEq,
-					Value:    4.75,
-				},
+				filter.NewLogicalFilter("rating", filter.OpEq, 4.75), // Expected as float
 			},
 			wantErr: false,
 		},
@@ -633,11 +424,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[temperature][gte]": {"-10.5"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "temperature",
-					Operator: filter.OpGte,
-					Value:    -10.5,
-				},
+				filter.NewLogicalFilter("temperature", filter.OpGte, -10.5), // Expected as float
 			},
 			wantErr: false,
 		},
@@ -647,11 +434,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[user_name][eq]": {"john_doe"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "user_name",
-					Operator: filter.OpEq,
-					Value:    "john_doe",
-				},
+				filter.NewLogicalFilter("user_name", filter.OpEq, "john_doe"),
 			},
 			wantErr: false,
 		},
@@ -660,20 +443,17 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[ids][in]": {},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error if 'in' is empty
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "invalid numeric value",
 			query: map[string][]string{
 				"filters[age][eq]": {"twenty"},
 			},
-			wantErr: false,
+			wantErr: false, // Expect string if conversion fails
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "age",
-					Operator: filter.OpEq,
-					Value:    "twenty",
-				},
+				filter.NewLogicalFilter("age", filter.OpEq, "twenty"),
 			},
 		},
 		{
@@ -682,11 +462,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[status][neq]": {"inactive"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "status",
-					Operator: filter.OpNe,
-					Value:    "inactive",
-				},
+				filter.NewLogicalFilter("status", filter.OpNe, "inactive"),
 			},
 			wantErr: false,
 		},
@@ -696,11 +472,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[codes][in]": {"123", "abc", "45.6"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "codes",
-					Operator: filter.OpIn,
-					Value:    []any{123, "abc", 45.6},
-				},
+				filter.NewLogicalFilter("codes", filter.OpIn, []any{123, "abc", 45.6}), // Expect mixed types with conversion
 			},
 			wantErr: false,
 		},
@@ -709,13 +481,9 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[UserName][eq]": {"john"},
 			},
-			wantErr: false,
+			wantErr: false, // Field names are usually case-sensitive as provided
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "UserName",
-					Operator: filter.OpEq,
-					Value:    "john",
-				},
+				filter.NewLogicalFilter("UserName", filter.OpEq, "john"),
 			},
 		},
 		{
@@ -724,11 +492,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[price][between]": {"10", "20"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "price",
-					Operator: filter.OpBetween,
-					Value:    []any{10, 20},
-				},
+				filter.NewLogicalFilter("price", filter.OpBetween, []any{10, 20}),
 			},
 			wantErr: false,
 		},
@@ -738,11 +502,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[note][contains]": {"hello,world"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "note",
-					Operator: filter.OpContains,
-					Value:    "hello,world",
-				},
+				filter.NewLogicalFilter("note", filter.OpContains, "hello,world"),
 			},
 			wantErr: false,
 		},
@@ -752,11 +512,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[search][contains]": {""},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "search",
-					Operator: filter.OpContains,
-					Value:    "",
-				},
+				filter.NewLogicalFilter("search", filter.OpContains, ""),
 			},
 			wantErr: false,
 		},
@@ -766,11 +522,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[offset][between]": {"0", "10"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "offset",
-					Operator: filter.OpBetween,
-					Value:    []any{0, 10},
-				},
+				filter.NewLogicalFilter("offset", filter.OpBetween, []any{0, 10}), // Expected as numbers
 			},
 			wantErr: false,
 		},
@@ -781,16 +533,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[ratio][lte]":      {"3.141592653589793"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "population",
-					Operator: filter.OpGte,
-					Value:    1000000000,
-				},
-				&filter.LogicalFilter{
-					Field:    "ratio",
-					Operator: filter.OpLte,
-					Value:    3.141592653589793,
-				},
+				filter.NewLogicalFilter("population", filter.OpGte, 1000000000),
+				filter.NewLogicalFilter("ratio", filter.OpLte, 3.141592653589793),
 			},
 			wantErr: false,
 		},
@@ -800,17 +544,10 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[active][eq]": {"1"},
 				"filters[vip][eq]":    {"0"},
 			},
+			// Assuming '1' and '0' convert to numbers, not bools
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "active",
-					Operator: filter.OpEq,
-					Value:    1,
-				},
-				&filter.LogicalFilter{
-					Field:    "vip",
-					Operator: filter.OpEq,
-					Value:    0,
-				},
+				filter.NewLogicalFilter("active", filter.OpEq, 1),
+				filter.NewLogicalFilter("vip", filter.OpEq, 0),
 			},
 			wantErr: false,
 		},
@@ -819,26 +556,26 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[flag][eq]": {"True"},
 			},
-			wantErr: true,
+			wantErr:  true, // Assuming only lowercase 'true'/'false' are supported as bools
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "invalid between array size",
 			query: map[string][]string{
 				"filters[range][between]": {"10"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error if 'between' does not have 2 values
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "url encoded values",
 			query: map[string][]string{
 				"filters[message][contains]": {"hello%20world"},
 			},
+			// Assuming URL parameters are parsed *before* the FilterParser
+			// and the values are already decoded by net/url.Values.
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "message",
-					Operator: filter.OpContains,
-					Value:    "hello%20world",
-				},
+				filter.NewLogicalFilter("message", filter.OpContains, "hello world"), // Expected decoded value
 			},
 			wantErr: false,
 		},
@@ -847,14 +584,16 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[status][eq]": {"active", "inactive"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error if a non-array operator gets multiple values
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "empty filter key segments",
 			query: map[string][]string{
 				"filters[][eq]": {"value"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error on empty key segment
+			expected: nil,  // No expected filters on error
 		},
 		{
 			name: "negative numbers in in operator",
@@ -862,11 +601,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[temps][in]": {"-5", "-10", "0"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "temps",
-					Operator: filter.OpIn,
-					Value:    []any{-5, -10, 0},
-				},
+				filter.NewLogicalFilter("temps", filter.OpIn, []any{-5, -10, 0}), // Expected as numbers
 			},
 			wantErr: false,
 		},
@@ -877,16 +612,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[alt_code][eq]": {"456"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "code",
-					Operator: filter.OpEq,
-					Value:    123,
-				},
-				&filter.LogicalFilter{
-					Field:    "alt_code",
-					Operator: filter.OpEq,
-					Value:    456,
-				},
+				filter.NewLogicalFilter("code", filter.OpEq, 123),
+				filter.NewLogicalFilter("alt_code", filter.OpEq, 456),
 			},
 			wantErr: false,
 		},
@@ -896,11 +623,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[comment][eq]": {""},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "comment",
-					Operator: filter.OpEq,
-					Value:    "",
-				},
+				filter.NewLogicalFilter("comment", filter.OpEq, ""),
 			},
 			wantErr: false,
 		},
@@ -909,19 +632,16 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[rating][approx]": {"4.5"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error on unknown operator
+			expected: nil,  // No expected filters on error
 		},
 		{
-			name: "multiple between values",
+			name: "multiple between values (duplicate test)",
 			query: map[string][]string{
 				"filters[price][between]": {"10", "20"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "price",
-					Operator: filter.OpBetween,
-					Value:    []any{10, 20},
-				},
+				filter.NewLogicalFilter("price", filter.OpBetween, []any{10, 20}),
 			},
 			wantErr: false,
 		},
@@ -931,11 +651,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[code][eq]": {"00123"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "code",
-					Operator: filter.OpEq,
-					Value:    123,
-				},
+				filter.NewLogicalFilter("code", filter.OpEq, 123), // Expected as number
 			},
 			wantErr: false,
 		},
@@ -945,11 +661,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[value][eq]": {"1e3"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "value",
-					Operator: filter.OpEq,
-					Value:    1000.0,
-				},
+				filter.NewLogicalFilter("value", filter.OpEq, 1000.0), // Expected as float
 			},
 			wantErr: false,
 		},
@@ -958,39 +670,30 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 			query: map[string][]string{
 				"filters[id][eq]": {"not-a-uuid"},
 			},
+			// UUID validation is typically done *after* parsing.
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "id",
-					Operator: filter.OpEq,
-					Value:    "not-a-uuid",
-				},
+				filter.NewLogicalFilter("id", filter.OpEq, "not-a-uuid"),
 			},
 			wantErr: false,
 		},
 		{
-			name: "uppercase operator name",
+			name: "uppercase operator name (duplicate test)",
 			query: map[string][]string{
 				"filters[name][EQ]": {"john"},
 			},
-			wantErr: true,
+			wantErr:  true, // Expect error on unknown operator casing
+			expected: nil,  // No expected filters on error
 		},
 		{
-			name: "mixed boolean representations",
+			name: "mixed boolean representations (duplicate test)",
 			query: map[string][]string{
 				"filters[active][eq]": {"1"},
 				"filters[vip][eq]":    {"0"},
 			},
+			// Assuming '1' and '0' convert to numbers.
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "active",
-					Operator: filter.OpEq,
-					Value:    1,
-				},
-				&filter.LogicalFilter{
-					Field:    "vip",
-					Operator: filter.OpEq,
-					Value:    0,
-				},
+				filter.NewLogicalFilter("active", filter.OpEq, 1),
+				filter.NewLogicalFilter("vip", filter.OpEq, 0),
 			},
 			wantErr: false,
 		},
@@ -1000,11 +703,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[measurement][eq]": {"2.5e3"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "measurement",
-					Operator: filter.OpEq,
-					Value:    2500.0,
-				},
+				filter.NewLogicalFilter("measurement", filter.OpEq, 2500.0), // Expected as float
 			},
 			wantErr: false,
 		},
@@ -1014,25 +713,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[user-id][eq]": {"42"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "user-id",
-					Operator: filter.OpEq,
-					Value:    42,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "url encoded value handling",
-			query: map[string][]string{
-				"filters[message][contains]": {"hello%20world"},
-			},
-			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "message",
-					Operator: filter.OpContains,
-					Value:    "hello%20world",
-				},
+				filter.NewLogicalFilter("user-id", filter.OpEq, 42), // Expected as number
 			},
 			wantErr: false,
 		},
@@ -1042,11 +723,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[tags][nina]": {"123", "abc"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "tags",
-					Operator: filter.OpNina,
-					Value:    []any{123, "abc"},
-				},
+				filter.NewLogicalFilter("tags", filter.OpNina, []any{123, "abc"}), // Mixed types expected
 			},
 			wantErr: false,
 		},
@@ -1056,25 +733,17 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[code][startswiths]": {"ABC123"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "code",
-					Operator: filter.OpStartswiths,
-					Value:    "ABC123",
-				},
+				filter.NewLogicalFilter("code", filter.OpStartswiths, "ABC123"),
 			},
 			wantErr: false,
 		},
 		{
-			name: "multiple in values as separate params",
+			name: "multiple in values as separate params (duplicate test)",
 			query: map[string][]string{
 				"filters[id][in]": {"1", "2"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "id",
-					Operator: filter.OpIn,
-					Value:    []any{1, 2},
-				},
+				filter.NewLogicalFilter("id", filter.OpIn, []any{1, 2}), // Expected as numbers
 			},
 			wantErr: false,
 		},
@@ -1084,11 +753,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[temp][between]": {"-10", "0"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "temp",
-					Operator: filter.OpBetween,
-					Value:    []any{-10, 0},
-				},
+				filter.NewLogicalFilter("temp", filter.OpBetween, []any{-10, 0}), // Expected as numbers
 			},
 			wantErr: false,
 		},
@@ -1100,21 +765,9 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				"filters[active][eq]":     {"true"},
 			},
 			expected: []filter.CrudFilter{
-				&filter.LogicalFilter{
-					Field:    "name",
-					Operator: filter.OpContains,
-					Value:    "test",
-				},
-				&filter.LogicalFilter{
-					Field:    "age",
-					Operator: filter.OpGte,
-					Value:    25,
-				},
-				&filter.LogicalFilter{
-					Field:    "active",
-					Operator: filter.OpEq,
-					Value:    true,
-				},
+				filter.NewLogicalFilter("name", filter.OpContains, "test"),
+				filter.NewLogicalFilter("age", filter.OpGte, 25),
+				filter.NewLogicalFilter("active", filter.OpEq, true),
 			},
 			wantErr: false,
 		},
@@ -1132,32 +785,35 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 
 			assert.NoError(t, err)
 
+			// We no longer need a separate transformation step as expected is already built with constructors
+
 			// Sort filters for consistent comparison
+			// Sorting logic needs to access fields via getters if they are private
 			sort.SliceStable(filters, func(i, j int) bool {
 				f1 := filters[i]
 				f2 := filters[j]
 				var field1, field2 string
 				// Prioritize LogicalFilter's Field for sorting
 				if lf, ok := f1.(*filter.LogicalFilter); ok {
-					field1 = lf.Field
+					field1 = lf.Field() // Use getter
 				} else if cf, ok := f1.(*filter.ConditionalFilter); ok {
 					// Fallback for ConditionalFilter: sort by operator string
-					field1 = string(cf.Operator)
+					field1 = string(cf.GetOperator()) // Use getter
 					// Add first child field if available
-					if len(cf.Filters) > 0 {
-						if lfc, okc := cf.Filters[0].(*filter.LogicalFilter); okc {
-							field1 += ":" + lfc.Field
+					if len(cf.GetFilters()) > 0 { // Use getter
+						if lfc, okc := cf.GetFilters()[0].(*filter.LogicalFilter); okc { // Use getter
+							field1 += ":" + lfc.Field() // Use getter
 						}
 					}
 				}
 
 				if lf, ok := f2.(*filter.LogicalFilter); ok {
-					field2 = lf.Field
+					field2 = lf.Field() // Use getter
 				} else if cf, ok := f2.(*filter.ConditionalFilter); ok {
-					field2 = string(cf.Operator)
-					if len(cf.Filters) > 0 {
-						if lfc, okc := cf.Filters[0].(*filter.LogicalFilter); okc {
-							field2 += ":" + lfc.Field
+					field2 = cf.GetOperator()     // Use getter
+					if len(cf.GetFilters()) > 0 { // Use getter
+						if lfc, okc := cf.GetFilters()[0].(*filter.LogicalFilter); okc { // Use getter
+							field2 += ":" + lfc.Field() // Use getter
 						}
 					}
 				}
@@ -1169,46 +825,33 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				f2 := tt.expected[j]
 				var field1, field2 string
 				if lf, ok := f1.(*filter.LogicalFilter); ok {
-					field1 = lf.Field
+					field1 = lf.Field() // Use getter
 				} else if cf, ok := f1.(*filter.ConditionalFilter); ok {
-					field1 = string(cf.Operator)
-					if len(cf.Filters) > 0 {
-						if lfc, okc := cf.Filters[0].(*filter.LogicalFilter); okc {
-							field1 += ":" + lfc.Field
+					field1 = string(cf.GetOperator()) // Use getter
+					if len(cf.GetFilters()) > 0 {     // Use getter
+						if lfc, okc := cf.GetFilters()[0].(*filter.LogicalFilter); okc { // Use getter
+							field1 += ":" + lfc.Field() // Use getter
 						}
 					}
 				}
 				if lf, ok := f2.(*filter.LogicalFilter); ok {
-					field2 = lf.Field
+					field2 = lf.Field() // Use getter
 				} else if cf, ok := f2.(*filter.ConditionalFilter); ok {
-					field2 = string(cf.Operator)
-					if len(cf.Filters) > 0 {
-						if lfc, okc := cf.Filters[0].(*filter.LogicalFilter); okc {
-							field2 += ":" + lfc.Field
+					field2 = string(cf.GetOperator()) // Use getter
+					if len(cf.GetFilters()) > 0 {     // Use getter
+						if lfc, okc := cf.GetFilters()[0].(*filter.LogicalFilter); okc { // Use getter
+							field2 += ":" + lfc.Field() // Use getter
 						}
 					}
 				}
 				return field1 < field2
 			})
 
-			assert.Equal(t, len(tt.expected), len(filters), "Number of filters mismatch")
+			// Use assert.Equal for deep comparison. This works correctly
+			// when both slices contain objects created via constructors
+			// that populate the same (exported or unexported) fields.
+			assert.Equal(t, tt.expected, filters, "Parsed filters do not match expected")
 
-			for i, expected := range tt.expected {
-				switch exp := expected.(type) {
-				case *filter.LogicalFilter:
-					act, ok := filters[i].(*filter.LogicalFilter)
-					assert.True(t, ok, "Expected LogicalFilter at position %d", i)
-					assert.Equal(t, exp.Field, act.Field, "Field mismatch")
-					assert.Equal(t, exp.Operator, act.Operator, "Operator mismatch")
-					assert.Equal(t, exp.Value, act.Value, "Value mismatch")
-
-				case *filter.ConditionalFilter:
-					act, ok := filters[i].(*filter.ConditionalFilter)
-					assert.True(t, ok, "Expected ConditionalFilter at position %d", i)
-					assert.Equal(t, exp.Operator, act.Operator, "Operator mismatch")
-					assert.Equal(t, len(exp.Filters), len(act.Filters), "Nested filters count mismatch")
-				}
-			}
 		})
 	}
 }
