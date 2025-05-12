@@ -11,12 +11,12 @@ type (
 	RequestParser      = parser.Parser
 	Sort               = filter.Sort
 	SortConfig         = filter.SortConfig
-	SortOrder          = filter.SortOrder  
+	SortOrder          = filter.SortOrder
 	CrudFilter         = filter.CrudFilter
 	GlobalSearchConfig = filter.GlobalSearchConfig
 	Pagination         = filter.Pagination
 	PaginationError    = filter.PaginationError
-	Filter             = filter.CrudFilter
+	Filter             = filter.LogicalFilter
 	Operator           = filter.Operator
 )
 
