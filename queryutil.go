@@ -55,7 +55,7 @@ var OperatorMap = filter.OperatorMap
 
 // QueryBuilder defines the interface for building query clauses
 type QueryBuilder interface {
-	Apply(tx interface{}, filters []filter.CrudFilter) (interface{}, error)
+	Apply(tx any, filters []filter.CrudFilter) (any, error)
 }
 
 // ParseFromSource is the unified parsing entry point using the RequestParser interface

@@ -89,7 +89,7 @@ func (p *HTTPRequestParser) ParsePagination() (Pagination, error) {
 
 // ParseRequest parses all query parameters from an HTTP request.
 // This is maintained for backward compatibility with older code.
-func ParseRequest(r interface{}) ([]CrudFilter, []Sort, Pagination, error) {
+func ParseRequest(r any) ([]CrudFilter, []Sort, Pagination, error) {
 	if req, ok := r.(*http.Request); ok {
 		filters, sorts, pagination, err := ParseFromSource(NewHTTPRequestParser(req, nil, nil))
 		return filters, sorts, pagination, err
@@ -99,7 +99,7 @@ func ParseRequest(r interface{}) ([]CrudFilter, []Sort, Pagination, error) {
 
 // ParseRequestWithSearch parses query parameters with global search support.
 // This is maintained for backward compatibility.
-func ParseRequestWithSearch(r interface{}, searchConfig *GlobalSearchConfig) ([]CrudFilter, []Sort, Pagination, error) {
+func ParseRequestWithSearch(r any, searchConfig *GlobalSearchConfig) ([]CrudFilter, []Sort, Pagination, error) {
 	if req, ok := r.(*http.Request); ok {
 		filters, sorts, pagination, err := ParseFromSource(NewHTTPRequestParser(req, searchConfig, &filter.SortConfig{
 			SortableFields: searchConfig.SearchableColumns,

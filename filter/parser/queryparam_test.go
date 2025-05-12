@@ -225,7 +225,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 						&filter.LogicalFilter{
 							Field:    "price",
 							Operator: filter.OpBetween,
-							Value:    []interface{}{10, 50},
+							Value:    []any{10, 50},
 						},
 						&filter.ConditionalFilter{
 							Operator: filter.LogicalOr,
@@ -389,7 +389,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "price",
 					Operator: filter.OpBetween,
-					Value:    []interface{}{10, 20},
+					Value:    []any{10, 20},
 				},
 			},
 			wantErr: false,
@@ -403,7 +403,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "id",
 					Operator: filter.OpIn,
-					Value:    []interface{}{1, 2, 3}, // EXPECT NUMBERS
+					Value:    []any{1, 2, 3}, // EXPECT NUMBERS
 				},
 			},
 			wantErr: false,
@@ -445,7 +445,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "tags",
 					Operator: filter.OpIna,
-					Value:    []interface{}{"go", 123},
+					Value:    []any{"go", 123},
 				},
 			},
 			wantErr: false,
@@ -518,7 +518,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "id",
 					Operator: filter.OpIn,
-					Value:    []interface{}{1, 2, 3},
+					Value:    []any{1, 2, 3},
 				},
 			},
 			wantErr: false,
@@ -566,7 +566,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "id",
 					Operator: filter.OpIn,
-					Value:    []interface{}{1, "abc"},
+					Value:    []any{1, "abc"},
 				},
 			},
 			wantErr: false,
@@ -601,7 +601,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "category",
 					Operator: filter.OpIn,
-					Value:    []interface{}{"shoes"},
+					Value:    []any{"shoes"},
 				},
 			},
 			wantErr: false,
@@ -699,7 +699,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "codes",
 					Operator: filter.OpIn,
-					Value:    []interface{}{123, "abc", 45.6},
+					Value:    []any{123, "abc", 45.6},
 				},
 			},
 			wantErr: false,
@@ -727,7 +727,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "price",
 					Operator: filter.OpBetween,
-					Value:    []interface{}{10, 20},
+					Value:    []any{10, 20},
 				},
 			},
 			wantErr: false,
@@ -769,7 +769,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "offset",
 					Operator: filter.OpBetween,
-					Value:    []interface{}{0, 10},
+					Value:    []any{0, 10},
 				},
 			},
 			wantErr: false,
@@ -865,7 +865,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "temps",
 					Operator: filter.OpIn,
-					Value:    []interface{}{-5, -10, 0},
+					Value:    []any{-5, -10, 0},
 				},
 			},
 			wantErr: false,
@@ -920,7 +920,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "price",
 					Operator: filter.OpBetween,
-					Value:    []interface{}{10, 20},
+					Value:    []any{10, 20},
 				},
 			},
 			wantErr: false,
@@ -1045,7 +1045,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "tags",
 					Operator: filter.OpNina,
-					Value:    []interface{}{123, "abc"},
+					Value:    []any{123, "abc"},
 				},
 			},
 			wantErr: false,
@@ -1073,7 +1073,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "id",
 					Operator: filter.OpIn,
-					Value:    []interface{}{1, 2},
+					Value:    []any{1, 2},
 				},
 			},
 			wantErr: false,
@@ -1087,7 +1087,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				&filter.LogicalFilter{
 					Field:    "temp",
 					Operator: filter.OpBetween,
-					Value:    []interface{}{-10, 0},
+					Value:    []any{-10, 0},
 				},
 			},
 			wantErr: false,

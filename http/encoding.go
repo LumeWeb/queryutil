@@ -15,9 +15,9 @@ import (
 //	w := httptest.NewRecorder()
 //	var emptySlice []string
 //	EncodeJSON(w, emptySlice) // Writes "[]" instead of "null"
-func EncodeJSON(w http.ResponseWriter, v interface{}) error {
+func EncodeJSON(w http.ResponseWriter, v any) error {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	// Handle empty slices and maps specially
 	val := reflect.ValueOf(v)
 	if val.Kind() == reflect.Slice && val.Len() == 0 {
@@ -27,7 +27,7 @@ func EncodeJSON(w http.ResponseWriter, v interface{}) error {
 		_, err := w.Write([]byte("{}\n"))
 		return err
 	}
-	
+
 	// Use standard JSON encoding for other values
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "\t")

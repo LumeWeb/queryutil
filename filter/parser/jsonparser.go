@@ -29,7 +29,7 @@ func NewJSONParser(input string, opts ...ParserOption) *JSONParser {
 // ParseFilters converts JSON input into filter clauses with validation.
 // Handles both logical and conditional filters with nested structures.
 // The JSON input should be an array of filter objects with either:
-// - Logical filters: {"field", "operator", "value"} 
+// - Logical filters: {"field", "operator", "value"}
 // - Conditional filters: {"operator": "and/or/not", "value": [nested filters]}
 // Returns parsed filters or validation error if JSON is malformed
 func (p *JSONParser) ParseFilters() ([]filter.CrudFilter, error) {
@@ -94,18 +94,18 @@ func (p *JSONParser) ParseFilters() ([]filter.CrudFilter, error) {
 	return filters, nil
 }
 
-func validateValueForOperator(op filter.Operator, value interface{}) error {
+func validateValueForOperator(op filter.Operator, value any) error {
 	switch op {
 	case filter.OpNull, filter.OpNnull:
 		if value != nil {
 			return fmt.Errorf("operator %q requires null value", op)
 		}
 	case filter.OpBetween, filter.OpNbetween:
-		if vals, ok := value.([]interface{}); !ok || len(vals) != 2 {
+		if vals, ok := value.([]any); !ok || len(vals) != 2 {
 			return fmt.Errorf("operator %q requires array with exactly 2 values", op)
 		}
 	case filter.OpIn, filter.OpNin, filter.OpIna, filter.OpNina:
-		if _, ok := value.([]interface{}); !ok {
+		if _, ok := value.([]any); !ok {
 			return fmt.Errorf("operator %q requires array value", op)
 		}
 	}
@@ -119,7 +119,7 @@ func parseFilter(rf json.RawMessage) (filter.CrudFilter, error) {
 		if _, err := filter.ParseOperator(string(lf.Operator)); err != nil {
 			return nil, fmt.Errorf("invalid operator %q: %w", lf.Operator, err)
 		}
-		
+
 		// Validate value type for operator
 		if err := validateValueForOperator(lf.Operator, lf.Value); err != nil {
 			return nil, fmt.Errorf("invalid value for operator %q: %w", lf.Operator, err)

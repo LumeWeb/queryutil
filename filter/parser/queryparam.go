@@ -43,8 +43,8 @@ const (
 // QueryParamParser handles parsing of filter parameters from URL query strings.
 // Supports complex nested filters using bracket notation and various operators.
 type QueryParamParser struct {
-	query  url.Values        // Source query parameters
-	config *ParserOptions    // Parser configuration
+	query  url.Values     // Source query parameters
+	config *ParserOptions // Parser configuration
 }
 
 // NewQueryParamParser creates a new parser instance for URL query parameters.
@@ -73,7 +73,7 @@ func (p *QueryParamParser) ParseSorts(config *filter.SortConfig) ([]filter.Sort,
 // Returns combined filters or validation error if parameters are malformed
 func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
 	log.Printf("Starting query parameter parsing with config: %+v", p.config)
-	filterMap := make(map[string]interface{})
+	filterMap := make(map[string]any)
 
 	// Build filter structure from query parameters
 	log.Printf("Processing %d query parameters", len(p.query))
@@ -113,10 +113,10 @@ func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
 		currentNestedMap := filterMap
 		for _, segment := range segments[:len(segments)-1] {
 			if _, ok := currentNestedMap[segment]; !ok {
-				currentNestedMap[segment] = make(map[string]interface{})
+				currentNestedMap[segment] = make(map[string]any)
 			}
 
-			if nextMap, ok := currentNestedMap[segment].(map[string]interface{}); ok {
+			if nextMap, ok := currentNestedMap[segment].(map[string]any); ok {
 				currentNestedMap = nextMap
 			} else {
 				return nil, fmt.Errorf("path conflict at segment '%s' for key '%s'", segment, key)
@@ -125,7 +125,7 @@ func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
 
 		finalKey := segments[len(segments)-1]
 		if _, exists := currentNestedMap[finalKey]; exists {
-			if _, isMap := currentNestedMap[finalKey].(map[string]interface{}); isMap {
+			if _, isMap := currentNestedMap[finalKey].(map[string]any); isMap {
 				return nil, fmt.Errorf("path conflict at final key '%s' for query key '%s'", finalKey, key)
 			}
 		}
@@ -159,19 +159,19 @@ func parseSegments(path string) []string {
 	return result
 }
 
-func (p *QueryParamParser) buildFilters(data interface{}) ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) buildFilters(data any) ([]filter.CrudFilter, error) {
 	log.Printf("Building filters from data type: %T", data)
 	switch v := data.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		return p.buildFromMap(v)
-	case []interface{}:
+	case []any:
 		return p.buildFromSlice(v)
 	default:
 		return nil, fmt.Errorf("unexpected filter structure type: %T", data)
 	}
 }
 
-func (p *QueryParamParser) buildFromMap(m map[string]interface{}) ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, error) {
 	var filters []filter.CrudFilter
 	log.Printf("Building from map with %d keys", len(m))
 
@@ -200,11 +200,11 @@ func (p *QueryParamParser) buildFromMap(m map[string]interface{}) ([]filter.Crud
 	return filters, nil
 }
 
-func (p *QueryParamParser) buildConditionalFilter(operator string, value interface{}) ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) buildConditionalFilter(operator string, value any) ([]filter.CrudFilter, error) {
 	var nestedFilters []filter.CrudFilter
 
 	// Handle both array and single map values for nested conditionals
-	if arr, ok := value.([]interface{}); ok {
+	if arr, ok := value.([]any); ok {
 		for _, item := range arr {
 			filters, err := p.buildFilters(item)
 			if err != nil {
@@ -212,7 +212,7 @@ func (p *QueryParamParser) buildConditionalFilter(operator string, value interfa
 			}
 			nestedFilters = append(nestedFilters, filters...)
 		}
-	} else if m, ok := value.(map[string]interface{}); ok {
+	} else if m, ok := value.(map[string]any); ok {
 		var intKeys []int
 		for kStr := range m {
 			if kInt, err := strconv.Atoi(kStr); err == nil {
@@ -249,7 +249,7 @@ func (p *QueryParamParser) buildConditionalFilter(operator string, value interfa
 	}}, nil
 }
 
-func convertStringValue(value interface{}) (interface{}, error) {
+func convertStringValue(value any) (any, error) {
 	switch v := value.(type) {
 	case string:
 		if v == "" {
@@ -285,7 +285,7 @@ func convertStringValue(value interface{}) (interface{}, error) {
 		if len(v) == 0 {
 			return nil, fmt.Errorf("empty array value")
 		}
-		var converted []interface{}
+		var converted []any
 		for _, s := range v {
 			c, err := convertStringValue(s)
 			if err != nil {
@@ -295,8 +295,8 @@ func convertStringValue(value interface{}) (interface{}, error) {
 		}
 		return converted, nil
 
-	case []interface{}:
-		var convertedInternal []interface{}
+	case []any:
+		var convertedInternal []any
 		for _, item := range v {
 			c, err := convertStringValue(item)
 			if err != nil {
@@ -311,7 +311,7 @@ func convertStringValue(value interface{}) (interface{}, error) {
 }
 
 // isNumericType checks if a value is an integer or float type.
-func isNumericType(val interface{}) (isNumeric bool, typeName string) {
+func isNumericType(val any) (isNumeric bool, typeName string) {
 	switch val.(type) {
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		return true, "integer"
@@ -329,7 +329,7 @@ func isNumericType(val interface{}) (isNumeric bool, typeName string) {
 // - Boolean values (strict "true"/"false" only)
 // - Array values for IN/NIN/BETWEEN operators
 // Returns formatted LogicalFilter or error if validation fails
-func (p *QueryParamParser) buildLogicalFilter(field string, value interface{}) (filter.CrudFilter, error) {
+func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.CrudFilter, error) {
 	log.Printf("Building logical filter for field: %q, raw value type: %T, raw value: %+v", field, value, value)
 	if field == "" {
 		log.Printf("Rejecting filter with empty field name.")
@@ -337,9 +337,9 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value interface{}) (
 	}
 
 	var operator filter.Operator
-	var rawValForOpProcessing interface{}
+	var rawValForOpProcessing any
 
-	if subMap, ok := value.(map[string]interface{}); ok {
+	if subMap, ok := value.(map[string]any); ok {
 		if len(subMap) > 1 {
 			return nil, fmt.Errorf("multiple operators not allowed for field %q in query params", field)
 		}
@@ -370,7 +370,7 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value interface{}) (
 		}
 	}
 
-	var parsedVal interface{}
+	var parsedVal any
 	var err error
 	isProcessedAsNullOp := false
 
@@ -385,7 +385,7 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value interface{}) (
 			return nil, fmt.Errorf("operator %q on field %q does not accept values, got: %v", operator, field, tempVal)
 		}
 	} else if operator.RequiresArray() {
-		if valMap, ok := rawValForOpProcessing.(map[string]interface{}); ok {
+		if valMap, ok := rawValForOpProcessing.(map[string]any); ok {
 			var indexedStrValues []string
 			var intKeys []int
 			for kStr := range valMap {
@@ -433,7 +433,7 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value interface{}) (
 	}
 
 	if operator.RequiresArray() {
-		sliceVal, ok := parsedVal.([]interface{})
+		sliceVal, ok := parsedVal.([]any)
 		if parsedVal == nil || !ok || len(sliceVal) == 0 {
 			return nil, fmt.Errorf("operator %q on field %q requires non-empty array values", operator, field)
 		}
@@ -462,7 +462,7 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value interface{}) (
 		if parsedVal != nil {
 			return nil, fmt.Errorf("operator %q on field %q does not accept values, got: %v", operator, field, parsedVal)
 		}
-	} else if sliceVal, ok := parsedVal.([]interface{}); ok {
+	} else if sliceVal, ok := parsedVal.([]any); ok {
 		if len(sliceVal) > 1 {
 			return nil, fmt.Errorf("operator %q on field %q does not support multiple values", operator, field)
 		}
@@ -497,17 +497,17 @@ func (p *QueryParamParser) ParsePagination() (filter.Pagination, error) {
 	return filter.ParseQueryPagination(p.query)
 }
 
-func (p *QueryParamParser) buildFromSlice(s []interface{}) ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) buildFromSlice(s []any) ([]filter.CrudFilter, error) {
 	var filters []filter.CrudFilter
 
 	for _, item := range s {
-		if m, ok := item.(map[string]interface{}); ok {
+		if m, ok := item.(map[string]any); ok {
 			subFilters, err := p.buildFromMap(m)
 			if err != nil {
 				return nil, err
 			}
 			filters = append(filters, subFilters...)
-		} else if arr, ok := item.([]interface{}); ok {
+		} else if arr, ok := item.([]any); ok {
 			subFilters, err := p.buildFromSlice(arr)
 			if err != nil {
 				return nil, err

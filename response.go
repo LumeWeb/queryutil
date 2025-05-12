@@ -4,8 +4,8 @@ package queryutil
 // It includes both the data payload and a total count for pagination.
 // This structure is compatible with Refine's Simple REST Data Provider.
 type Response struct {
-	Data  interface{} `json:"data"`
-	Total int64       `json:"total"`
+	Data  any   `json:"data"`
+	Total int64 `json:"total"`
 }
 
 // BuildResponse creates a standard response object for list operations.
@@ -18,7 +18,7 @@ type Response struct {
 //	totalCount := int64(100)
 //	response := BuildResponse(users, totalCount)
 //	// response can be encoded to JSON and sent to the client
-func BuildResponse(data interface{}, total int64) *Response {
+func BuildResponse(data any, total int64) *Response {
 	return &Response{
 		Data:  data,
 		Total: total,

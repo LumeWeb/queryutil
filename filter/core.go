@@ -3,7 +3,7 @@ package filter
 import (
 	"errors"
 	"fmt"
-	
+
 	"github.com/samber/lo"
 )
 
@@ -35,15 +35,15 @@ type Clause interface {
 type ClauseType int
 
 const (
-	WhereClauseType ClauseType = iota    // Direct field comparison clause
+	WhereClauseType    ClauseType = iota // Direct field comparison clause
 	CompoundClauseType                   // Group of clauses combined with AND/OR/NOT
 )
 
 // LogicalFilter represents a direct field comparison condition
 type LogicalFilter struct {
-	Field    string      `json:"field"`    // Field name to filter on
-	Operator Operator    `json:"operator"` // Comparison operator
-	Value    interface{} `json:"value"`    // Value to compare against
+	Field    string   `json:"field"`    // Field name to filter on
+	Operator Operator `json:"operator"` // Comparison operator
+	Value    any      `json:"value"`    // Value to compare against
 }
 
 func (f *LogicalFilter) AcceptVisitor(v Visitor) (Clause, error) {
@@ -67,8 +67,8 @@ type GlobalSearchConfig struct {
 
 // Supported comparison operators
 const (
-	OpEq           Operator = "eq"  // Equal 
-	OpNe           Operator = "ne"  // Not equal
+	OpEq           Operator = "eq" // Equal
+	OpNe           Operator = "ne" // Not equal
 	OpLt           Operator = "lt"
 	OpGt           Operator = "gt"
 	OpLte          Operator = "lte"
@@ -96,34 +96,34 @@ const (
 )
 
 var OperatorMap = map[string]Operator{
-	"eq":          OpEq,
-	"ne":          OpNe,
-	"neq":         OpNe, // Alias for ne
-	"lt":          OpLt,
-	"gt":          OpGt,
-	"lte":         OpLte,
-	"gte":         OpGte,
-	"in":          OpIn,
-	"nin":         OpNin,
-	"contains":    OpContains,
-	"containss":   OpContainss,
-	"ncontains":   OpNcontains,
-	"ncontainss":  OpNcontainss,
-	"between":     OpBetween,
-	"nbetween":    OpNbetween,
-	"null":        OpNull,
-	"nnull":       OpNnull,
-	"startswith":  OpStartswith,
-	"startswiths": OpStartswiths,
-	"nstartswith": OpNstartswith,
+	"eq":           OpEq,
+	"ne":           OpNe,
+	"neq":          OpNe, // Alias for ne
+	"lt":           OpLt,
+	"gt":           OpGt,
+	"lte":          OpLte,
+	"gte":          OpGte,
+	"in":           OpIn,
+	"nin":          OpNin,
+	"contains":     OpContains,
+	"containss":    OpContainss,
+	"ncontains":    OpNcontains,
+	"ncontainss":   OpNcontainss,
+	"between":      OpBetween,
+	"nbetween":     OpNbetween,
+	"null":         OpNull,
+	"nnull":        OpNnull,
+	"startswith":   OpStartswith,
+	"startswiths":  OpStartswiths,
+	"nstartswith":  OpNstartswith,
 	"nstartswiths": OpNstartswiths,
-	"endswith":    OpEndswith,
-	"endswiths":   OpEndswiths,
-	"nendswith":   OpNendswith,
-	"nendswiths":  OpNendswiths,
-	"ina":         OpIna,
-	"nina":        OpNina,
-	"like":        OpContains, // Alias for contains
+	"endswith":     OpEndswith,
+	"endswiths":    OpEndswiths,
+	"nendswith":    OpNendswith,
+	"nendswiths":   OpNendswiths,
+	"ina":          OpIna,
+	"nina":         OpNina,
+	"like":         OpContains, // Alias for contains
 }
 
 // OperatorReverseMap provides reverse lookup from Operator to its string representation
@@ -139,7 +139,7 @@ var ErrUnsupportedOperator = errors.New("unsupported operator")
 
 // RequiresArray checks if the operator requires an array value
 func (o Operator) RequiresArray() bool {
-	return o == OpIn || o == OpNin || o == OpIna || o == OpNina || 
+	return o == OpIn || o == OpNin || o == OpIna || o == OpNina ||
 		o == OpBetween || o == OpNbetween
 }
 
@@ -160,4 +160,3 @@ func ApplyOptions[T any, O ~func(*T)](defaults T, opts []O) *T {
 	}
 	return &result
 }
-

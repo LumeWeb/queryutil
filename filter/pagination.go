@@ -8,10 +8,10 @@ import (
 
 // Pagination represents server-side pagination parameters
 type Pagination struct {
-	Start    int     // Starting record index (inclusive)
-	End      int     // Ending record index (exclusive)
-	PageSize int     // Calculated page size (End - Start)
-	Mode     string  // Pagination mode (typically "server")
+	Start    int    // Starting record index (inclusive)
+	End      int    // Ending record index (exclusive)
+	PageSize int    // Calculated page size (End - Start)
+	Mode     string // Pagination mode (typically "server")
 }
 
 // ParseQueryPagination extracts pagination parameters from URL query values.
@@ -84,7 +84,7 @@ func FormatContentRange(entityName string, p Pagination, resultCount int, totalC
 	)
 }
 
-func GetResultCount(data interface{}) int {
+func GetResultCount(data any) int {
 	v := reflect.ValueOf(data)
 	if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
 		return v.Len()
