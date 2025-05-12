@@ -2,7 +2,6 @@ package queryutil
 
 import (
 	"fmt"
-
 	"go.lumeweb.com/queryutil/filter"
 	"go.lumeweb.com/queryutil/filter/parser"
 )
