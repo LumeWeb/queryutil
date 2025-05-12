@@ -18,6 +18,7 @@ type (
 	PaginationError    = filter.PaginationError
 	Filter             = filter.LogicalFilter
 	Operator           = filter.Operator
+	LogicalOperator    = filter.LogicalOperator
 )
 
 // Re-export filter operators as typed constants

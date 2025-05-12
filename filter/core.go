@@ -23,6 +23,12 @@ type Visitor interface {
 type CrudFilter interface {
 	// AcceptVisitor enables the visitor pattern for filter evaluation
 	AcceptVisitor(Visitor) (Clause, error)
+	// GetOperator returns the filter's operator (for both logical and conditional filters)
+	GetOperator() string
+	// GetField returns the field name (empty string for conditional filters)
+	GetField() string
+	// GetFilters returns nested filters for conditional types (empty for logical filters)
+	GetFilters() []CrudFilter
 }
 
 // Clause represents a compiled filter expression ready for execution
@@ -50,14 +56,46 @@ func (f *LogicalFilter) AcceptVisitor(v Visitor) (Clause, error) {
 	return v.VisitLogical(f)
 }
 
+func (f *LogicalFilter) GetOperator() string {
+	return string(f.Operator)
+}
+
+func (f *LogicalFilter) GetField() string {
+	return f.Field
+}
+
+func (f *LogicalFilter) GetFilters() []CrudFilter {
+	return nil
+}
+
 // ConditionalFilter groups multiple filters with boolean logic
 type ConditionalFilter struct {
 	Operator LogicalOperator `json:"operator"` // AND/OR/NOT combinator
 	Filters  []CrudFilter    `json:"value"`    // Nested filter expressions
 }
 
+// NewConditionalFilter creates a new ConditionalFilter with validation
+func NewConditionalFilter(op LogicalOperator, filters []CrudFilter) CrudFilter {
+	if op == LogicalNot && len(filters) != 1 {
+		panic("NOT operator requires exactly one filter")
+	}
+	return &ConditionalFilter{Operator: op, Filters: filters}
+}
+
 func (f *ConditionalFilter) AcceptVisitor(v Visitor) (Clause, error) {
 	return v.VisitConditional(f)
+}
+
+func (f *ConditionalFilter) GetOperator() string {
+	return string(f.Operator)
+}
+
+func (f *ConditionalFilter) GetField() string {
+	return "" // Conditional filters don't have a field
+}
+
+func (f *ConditionalFilter) GetFilters() []CrudFilter {
+	return f.Filters
 }
 
 // GlobalSearchConfig defines settings for full-text search across multiple columns
