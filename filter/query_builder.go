@@ -102,9 +102,21 @@ func FieldIsNotNull(field string) CrudFilter {
 	return NewLogicalFilter(field, OpNnull, nil)
 }
 
-// Filters creates a filter group from multiple conditions
-func Filters(filters ...CrudFilter) []CrudFilter {
-	return filters
+// Filters creates a filter slice from individual filters or existing slices
+func Filters(filters ...any) []CrudFilter {
+	// Flatten nested slices and validate types
+	var result []CrudFilter
+	for _, f := range filters {
+		switch v := f.(type) {
+		case CrudFilter:
+			result = append(result, v)
+		case []CrudFilter:
+			result = append(result, v...)
+		default:
+			panic(fmt.Sprintf("invalid filter type %T - must be CrudFilter or []CrudFilter", f))
+		}
+	}
+	return result
 }
 
 // AndF combines filters with AND logic (explicit version)
