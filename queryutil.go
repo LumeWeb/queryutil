@@ -23,6 +23,15 @@ type (
 	LogicalOperator    = filter.LogicalOperator
 )
 
+var (
+	NewPagination     = filter.NewPagination
+	CreatePage        = filter.CreatePage
+	DefaultPagination = filter.DefaultPagination 
+	LargePagination   = filter.LargePagination
+	XLargePagination  = filter.XLargePagination
+	XXLargePagination = filter.XXLargePagination
+)
+
 // Re-exported constants
 
 // Filter operators

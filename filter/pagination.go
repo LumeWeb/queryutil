@@ -14,6 +14,45 @@ type Pagination struct {
 	Mode     string // Pagination mode (typically "server")
 }
 
+// Standard presets
+var (
+	DefaultPagination   = newPagination(0, 10)   // 10 items
+	LargePagination     = newPagination(0, 100)  // 100 items
+	XLargePagination    = newPagination(0, 200)  // 200 items
+	XXLargePagination   = newPagination(0, 500)  // 500 items
+)
+
+// NewPagination creates a validated pagination configuration
+func NewPagination(start, pageSize int) (Pagination, error) {
+	if pageSize <= 0 {
+		return Pagination{}, fmt.Errorf("invalid pageSize: %d - must be > 0", pageSize)
+	}
+	if start < 0 {
+		return Pagination{}, fmt.Errorf("invalid start: %d - must be >= 0", start)
+	}
+	
+	return newPagination(start, pageSize), nil
+}
+
+// CreatePage creates page-number based pagination (1-based)
+func CreatePage(pageNum, perPage int) (Pagination, error) {
+	if pageNum < 1 {
+		return Pagination{}, fmt.Errorf("invalid pageNum: %d - must be >= 1", pageNum)
+	}
+	start := (pageNum - 1) * perPage
+	return NewPagination(start, perPage)
+}
+
+// Internal helper for creating pagination instances
+func newPagination(start, pageSize int) Pagination {
+	return Pagination{
+		Start:    start,
+		End:      start + pageSize,
+		PageSize: pageSize,
+		Mode:     "server",
+	}
+}
+
 // ParseQueryPagination extracts pagination parameters from URL query values.
 // Handles validation of _start and _end parameters with sensible defaults:
 // - Default page size: 10
