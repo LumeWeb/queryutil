@@ -25,6 +25,15 @@ func TestQueryBuilderFunctions(t *testing.T) {
 				},
 			},
 			{
+				name: "Search",
+				fn:   func() CrudFilter { return Search("test") },
+				expected: &LogicalFilter{
+					field:    "q",
+					operator: OpContains,
+					value:    "test",
+				},
+			},
+			{
 				name: "NotEqual",
 				fn:   func() CrudFilter { return NotEqual("status", "active") },
 				expected: &LogicalFilter{
