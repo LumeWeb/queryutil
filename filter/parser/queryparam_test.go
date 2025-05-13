@@ -798,7 +798,7 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 					field1 = lf.Field() // Use getter
 				} else if cf, ok := f1.(*filter.ConditionalFilter); ok {
 					// Fallback for ConditionalFilter: sort by operator string
-					field1 = string(cf.GetOperator()) // Use getter
+					field1 = cf.GetOperator().String() // Use getter
 					// Add first child field if available
 					if len(cf.GetFilters()) > 0 { // Use getter
 						if lfc, okc := cf.GetFilters()[0].(*filter.LogicalFilter); okc { // Use getter
@@ -810,8 +810,8 @@ func TestQueryParamParser_ParseFilters(t *testing.T) {
 				if lf, ok := f2.(*filter.LogicalFilter); ok {
 					field2 = lf.Field() // Use getter
 				} else if cf, ok := f2.(*filter.ConditionalFilter); ok {
-					field2 = cf.GetOperator()     // Use getter
-					if len(cf.GetFilters()) > 0 { // Use getter
+					field2 = cf.GetOperator().String() // Use getter
+					if len(cf.GetFilters()) > 0 {      // Use getter
 						if lfc, okc := cf.GetFilters()[0].(*filter.LogicalFilter); okc { // Use getter
 							field2 += ":" + lfc.Field() // Use getter
 						}
