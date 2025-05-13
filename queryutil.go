@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"go.lumeweb.com/queryutil/filter"
 	"go.lumeweb.com/queryutil/filter/parser"
+	"golang.org/x/exp/constraints"
 )
 
+// Re-exported types
 type (
 	// RequestParser re-exports the parser.Parser interface
 	RequestParser      = parser.Parser
@@ -21,7 +23,9 @@ type (
 	LogicalOperator    = filter.LogicalOperator
 )
 
-// Re-export filter operators as typed constants
+// Re-exported constants
+
+// Filter operators
 const (
 	OpEq           = filter.OpEq
 	OpNe           = filter.OpNe
@@ -51,8 +55,16 @@ const (
 	OpNendswiths   = filter.OpNendswiths
 )
 
-// Re-export operator map as a variable
-var OperatorMap = filter.OperatorMap
+// Sort directions
+const (
+	OrderAsc  = filter.OrderAsc
+	OrderDesc = filter.OrderDesc
+)
+
+// Re-exported variables
+var (
+	OperatorMap = filter.OperatorMap
+)
 
 // QueryBuilder defines the interface for building query clauses
 type QueryBuilder interface {
@@ -60,7 +72,7 @@ type QueryBuilder interface {
 }
 
 // Query Builder API provides a fluent, type-safe interface for constructing filters:
-// 
+//
 // Core Predicates:
 // - Equal(field, value)        // Field equals value
 // - NotEqual(field, value)     // Field does not equal value
@@ -121,58 +133,78 @@ func ParseFromSource(parser RequestParser) ([]CrudFilter, []Sort, Pagination, er
 	return filters, sorts, pagination, nil
 }
 
-// Core predicate functions
+// Core functions
 var (
-	ParseQuerySort        = filter.ParseQuerySort
-	GetResultCount        = filter.GetResultCount
-	FormatContentRange    = filter.FormatContentRange
-	NewPaginationError    = filter.NewPaginationError
-	NewSortError          = filter.NewSortError
-	NewFilterError        = filter.NewFilterError
-	ParseQueryPagination  = filter.ParseQueryPagination
-	NewLogicalFilter      = filter.NewLogicalFilter
-	NewConditionalFilter  = filter.NewConditionalFilter
-	
-	// Core predicates
+	ParseQuerySort       = filter.ParseQuerySort
+	GetResultCount       = filter.GetResultCount
+	FormatContentRange   = filter.FormatContentRange
+	NewPaginationError   = filter.NewPaginationError
+	NewSortError         = filter.NewSortError
+	NewFilterError       = filter.NewFilterError
+	ParseQueryPagination = filter.ParseQueryPagination
+)
+
+// Filter constructors
+var (
+	NewLogicalFilter     = filter.NewLogicalFilter
+	NewConditionalFilter = filter.NewConditionalFilter
+)
+
+// Core predicates
+var (
 	Equal          = filter.Equal
 	NotEqual       = filter.NotEqual
 	GreaterThan    = filter.GreaterThan
-	GreaterOrEqual = filter.GreaterOrEqual 
+	GreaterOrEqual = filter.GreaterOrEqual
 	LessThan       = filter.LessThan
 	LessOrEqual    = filter.LessOrEqual
+	Search         = filter.Search
 	Contains       = filter.Contains
 	In             = filter.In
 	Between        = filter.Between
+)
+
+// Field operations
+var (
 	FieldNotBetween = filter.FieldNotBetween
-	FieldNotIn     = filter.FieldNotIn
-	FieldIsNull    = filter.FieldIsNull
-	FieldIsNotNull = filter.FieldIsNotNull
-	
-	// Logical combinators
+	FieldNotIn      = filter.FieldNotIn
+	FieldIsNull     = filter.FieldIsNull
+	FieldIsNotNull  = filter.FieldIsNotNull
+	FieldIn         = filter.FieldIn
+	FieldEqual      = filter.FieldEqual
+	FieldNotEqual   = filter.FieldNotEqual
+	FieldGt         = filter.FieldGt
+	FieldLt         = filter.FieldLt
+	FieldGte        = filter.FieldGte
+	FieldLte        = filter.FieldLte
+	FieldContains   = filter.FieldContains
+	FieldBetween    = filter.FieldBetween
+)
+
+// Logical combinators
+var (
 	And = filter.And
 	Or  = filter.Or
 	Not = filter.Not
-	
-	// Merge strategies
+)
+
+// Merge strategies
+var (
 	MergeStrategyOverride = filter.MergeStrategyOverride
 	MergeStrategyDeep     = filter.MergeStrategyDeep
 	MergeStrategyAppend   = filter.MergeStrategyAppend
 	MergeFilters          = filter.MergeFilters
-	
-	// Type-safe field helpers
-	StringField  = filter.StringField
-	NumberField  = filter.NumberField
-	BoolField    = filter.BoolField
-	TimeField    = filter.TimeField
-	
-	// Field-specific helpers
-	FieldIn        = filter.FieldIn
-	FieldEqual     = filter.FieldEqual
-	FieldNotEqual  = filter.FieldNotEqual
-	FieldGt        = filter.FieldGt
-	FieldLt        = filter.FieldLt
-	FieldGte       = filter.FieldGte
-	FieldLte       = filter.FieldLte
-	FieldContains  = filter.FieldContains
-	FieldBetween   = filter.FieldBetween
 )
+
+// Type-safe field helpers
+var (
+	StringField = filter.StringField
+	BoolField   = filter.BoolField
+	TimeField   = filter.TimeField
+)
+
+// NumberField creates a type-safe query builder helper for numeric fields.
+// Example: queryutil.NumberField[int]("age").Gt(18)
+func NumberField[T constraints.Integer | constraints.Float](field string) filter.NumberFieldHelper[T] {
+	return filter.NumberField[T](field)
+}

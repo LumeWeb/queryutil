@@ -64,6 +64,13 @@ func In(field string, values ...any) CrudFilter {
 }
 
 // Contains creates a 'field CONTAINS value' filter
+// Search creates a global search filter for the 'q' parameter.
+// Uses the OpContains operator on the special 'q' field.
+// Example: Search("test") -> "q contains 'test'"
+func Search(query string) CrudFilter {
+	return NewLogicalFilter("q", OpContains, query)
+}
+
 // Contains creates a case-insensitive substring filter.
 // Uses the OpContains operator. Value must be non-empty.
 // Example: Contains("name", "smith") -> "name ILIKE '%smith%'"
@@ -293,51 +300,51 @@ func StringField(field string) stringFieldHelper {
 	return stringFieldHelper{field: field}
 }
 
-type numberFieldHelper[T constraints.Integer | constraints.Float] struct {
+type NumberFieldHelper[T constraints.Integer | constraints.Float] struct {
 	field string
 }
 
-func (n numberFieldHelper[T]) Eq(v T) CrudFilter {
+func (n NumberFieldHelper[T]) Eq(v T) CrudFilter {
 	return FieldEqual(n.field, v)
 }
 
-func (n numberFieldHelper[T]) Gt(v T) CrudFilter {
+func (n NumberFieldHelper[T]) Gt(v T) CrudFilter {
 	return FieldGt(n.field, v)
 }
 
-func (n numberFieldHelper[T]) Lt(v T) CrudFilter {
+func (n NumberFieldHelper[T]) Lt(v T) CrudFilter {
 	return FieldLt(n.field, v)
 }
 
-func (n numberFieldHelper[T]) Gte(v T) CrudFilter {
+func (n NumberFieldHelper[T]) Gte(v T) CrudFilter {
 	return FieldGte(n.field, v)
 }
 
-func (n numberFieldHelper[T]) Lte(v T) CrudFilter {
+func (n NumberFieldHelper[T]) Lte(v T) CrudFilter {
 	return FieldLte(n.field, v)
 }
 
-func (n numberFieldHelper[T]) Between(min, max T) CrudFilter {
+func (n NumberFieldHelper[T]) Between(min, max T) CrudFilter {
 	return FieldBetween(n.field, min, max)
 }
 
-func (n numberFieldHelper[T]) NotBetween(min, max T) CrudFilter {
+func (n NumberFieldHelper[T]) NotBetween(min, max T) CrudFilter {
 	return FieldNotBetween(n.field, min, max)
 }
 
-func (n numberFieldHelper[T]) In(values ...T) CrudFilter {
+func (n NumberFieldHelper[T]) In(values ...T) CrudFilter {
 	return FieldIn(n.field, lo.ToAnySlice(values)...)
 }
 
-func (n numberFieldHelper[T]) NotIn(values ...T) CrudFilter {
+func (n NumberFieldHelper[T]) NotIn(values ...T) CrudFilter {
 	return FieldNotIn(n.field, lo.ToAnySlice(values)...)
 }
 
-func (n numberFieldHelper[T]) IsNull() CrudFilter {
+func (n NumberFieldHelper[T]) IsNull() CrudFilter {
 	return FieldIsNull(n.field)
 }
 
-func (n numberFieldHelper[T]) IsNotNull() CrudFilter {
+func (n NumberFieldHelper[T]) IsNotNull() CrudFilter {
 	return FieldIsNotNull(n.field)
 }
 
@@ -346,8 +353,8 @@ func (n numberFieldHelper[T]) IsNotNull() CrudFilter {
 // Example:
 // queryutil.NumberField[int]("age").Gte(18)
 // queryutil.NumberField[float64]("price").Between(10.5, 20.0)
-func NumberField[T constraints.Integer | constraints.Float](field string) numberFieldHelper[T] {
-	return numberFieldHelper[T]{field: field}
+func NumberField[T constraints.Integer | constraints.Float](field string) NumberFieldHelper[T] {
+	return NumberFieldHelper[T]{field: field}
 }
 
 // boolFieldHelper provides type-safe filtering methods for boolean fields

@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/gorm"
-	"log"
 )
-
-
 
 const (
 	sqlIsNull     = "IS NULL"
@@ -99,7 +96,6 @@ func (b *GORMBuilder) buildClauseCondition(clause filter.Clause) (*gorm.DB, erro
 
 	switch c := clause.(type) {
 	case *SQLClause:
-		log.Printf("Applying SQL clause - Field: %s, Query: %s, Params: %v", c.Field, c.Query, c.Params)
 
 		switch c.Query {
 		case sqlIsNull, sqlIsNotNull:
@@ -120,7 +116,6 @@ func (b *GORMBuilder) buildClauseCondition(clause filter.Clause) (*gorm.DB, erro
 			return conditionBuilderDB.Where(fmt.Sprintf("%s %s", c.Field, c.Query), c.Params...), nil
 		}
 	case *CompoundClause:
-		log.Printf("Applying compound clause - Operator: %s, Sub-filters: %d", c.Operator, len(c.Filters))
 		switch c.Operator {
 		case filter.LogicalAnd:
 			// For AND, chain .Where() calls on the current conditionBuilderDB.
@@ -141,7 +136,7 @@ func (b *GORMBuilder) buildClauseCondition(clause filter.Clause) (*gorm.DB, erro
 				return conditionBuilderDB.Where("1 = 0"), nil
 			}
 			if len(c.Filters) == 1 {
-                return b.buildClauseCondition(c.Filters[0])
+				return b.buildClauseCondition(c.Filters[0])
 			}
 			// Build the first sub-condition for the OR group.
 			firstSubConditionDB, err := b.buildClauseCondition(c.Filters[0])
@@ -182,7 +177,6 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 		// Global search 'q' field translates to an OR clause across searchable columns
 		if b.searchConfig == nil || len(b.searchConfig.SearchableColumns) == 0 {
 			// No search config or no searchable columns, 'q' filter has no effect
-			log.Printf("Warning: Global search filter 'q' used without searchable columns configured")
 			return nil, nil
 		}
 
@@ -196,7 +190,7 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 
 		return NewCompoundClause(filter.LogicalOr, clauses), nil
 	}
-	
+
 	// For all other logical filters, build a single SQL clause
 	condition, params, err := buildCondition(f.Field(), f.Operator(), f.Value())
 	if err != nil {
