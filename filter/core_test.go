@@ -14,7 +14,7 @@ func TestNewConditionalFilter(t *testing.T) {
 
 		cf := NewConditionalFilter(LogicalOr, []CrudFilter{f1, f2})
 
-		assert.Equal(t, string(LogicalOr), cf.GetOperator())
+		assert.EqualValues(t, LogicalOr, cf.GetOperator())
 		require.Len(t, cf.GetFilters(), 2)
 		assert.IsType(t, &LogicalFilter{}, cf.GetFilters()[0])
 		assert.IsType(t, &LogicalFilter{}, cf.GetFilters()[1])
@@ -25,7 +25,7 @@ func TestNewConditionalFilter(t *testing.T) {
 
 		cf := NewConditionalFilter(LogicalNot, []CrudFilter{f})
 
-		assert.Equal(t, string(LogicalNot), cf.GetOperator())
+		assert.EqualValues(t, string(LogicalNot), cf.GetOperator())
 		require.Len(t, cf.GetFilters(), 1)
 		assert.IsType(t, &LogicalFilter{}, cf.GetFilters()[0])
 	})

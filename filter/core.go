@@ -25,7 +25,9 @@ type CrudFilter interface {
 	// AcceptVisitor enables the visitor pattern for filter evaluation
 	AcceptVisitor(Visitor) (Clause, error)
 	// GetOperator returns the filter's operator (for both logical and conditional filters)
-	GetOperator() string
+	GetOperator() Operator
+	// GetValue returns the filter's value
+	GetValue() any
 	// GetField returns the field name (empty string for conditional filters)
 	GetField() string
 	// GetFilters returns nested filters for conditional types (empty for logical filters)
@@ -84,8 +86,13 @@ func (f *LogicalFilter) AcceptVisitor(v Visitor) (Clause, error) {
 	return v.VisitLogical(f)
 }
 
-func (f *LogicalFilter) GetOperator() string {
-	return string(f.Operator())
+func (f *LogicalFilter) GetOperator() Operator {
+	return f.operator
+}
+
+// GetValue returns the filter's comparison value
+func (f *LogicalFilter) GetValue() any {
+	return f.value
 }
 
 func (f *LogicalFilter) GetField() string {
@@ -118,8 +125,13 @@ func (f *ConditionalFilter) AcceptVisitor(v Visitor) (Clause, error) {
 	return v.VisitConditional(f)
 }
 
-func (f *ConditionalFilter) GetOperator() string {
-	return string(f.Operator)
+func (f *ConditionalFilter) GetOperator() Operator {
+	return Operator(f.Operator)
+}
+
+// GetValue returns the nested filters for conditional operators
+func (f *ConditionalFilter) GetValue() any {
+	return f.Filters
 }
 
 func (f *ConditionalFilter) GetField() string {
@@ -206,6 +218,10 @@ var OperatorMap = map[string]Operator{
 
 // OperatorReverseMap provides reverse lookup from Operator to its string representation
 var OperatorReverseMap = lo.Invert(OperatorMap)
+
+func (o Operator) String() string {
+    return string(o)
+}
 
 const (
 	LogicalAnd LogicalOperator = "and"
