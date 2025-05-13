@@ -159,6 +159,13 @@ var (
 	NewConditionalFilter = filter.NewConditionalFilter
 )
 
+// Filter composition helpers
+var (
+	Filters = filter.Filters
+	AndF    = filter.AndF
+	OrF     = filter.OrF
+)
+
 // Core predicates
 var (
 	Equal          = filter.Equal
