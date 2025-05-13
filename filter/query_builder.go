@@ -102,6 +102,21 @@ func FieldIsNotNull(field string) CrudFilter {
 	return NewLogicalFilter(field, OpNnull, nil)
 }
 
+// Filters creates a filter group from multiple conditions
+func Filters(filters ...CrudFilter) []CrudFilter {
+	return filters
+}
+
+// AndF combines filters with AND logic (explicit version)
+func AndF(filters ...CrudFilter) CrudFilter {
+	return NewConditionalFilter(LogicalAnd, filters)
+}
+
+// OrF combines filters with OR logic (explicit version)
+func OrF(filters ...CrudFilter) CrudFilter {
+	return NewConditionalFilter(LogicalOr, filters)
+}
+
 // Logical combinators
 
 // And combines filters with AND logic
