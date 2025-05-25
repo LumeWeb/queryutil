@@ -8,7 +8,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/samber/lo v1.49.1
 	github.com/stretchr/testify v1.10.0
-	go.lumeweb.com/httputil v0.3.5-0.20250525045623-576ceb578578
+	go.lumeweb.com/httputil v0.4.0
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	gorm.io/driver/sqlite v1.5.7
 	gorm.io/gorm v1.25.12
@@ -89,7 +89,7 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.19 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.19 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.19 // indirect
-	go.lumeweb.com/gswagger v0.0.0-20250525010010-2480f51b33ba // indirect
+	go.lumeweb.com/gswagger v0.11.0 // indirect
 	go.lumeweb.com/portal v0.4.2-0.20250504192002-4547d95e5a02 // indirect
 	go.lumeweb.com/portal-middleware v0.0.0-20250521113541-65cbec90e2a1 // indirect
 	go.sia.tech/core v0.10.4 // indirect
