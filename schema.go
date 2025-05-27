@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/invopop/jsonschema"
-	"go.lumeweb.com/httputil"
+	"go.lumeweb.com/portal-router"
 	"go.lumeweb.com/queryutil/filter"
 )
 
-var _ httputil.SchemaProvider = (*JsonSchamaProvider)(nil)
+var _ router.SchemaProvider = (*JsonSchamaProvider)(nil)
 
 // JsonSchamaProvider implements httputil.SchemaProvider using jsonschema reflection
 type JsonSchamaProvider struct {
@@ -31,7 +31,7 @@ func NewSchemaProvider() *JsonSchamaProvider {
 }
 
 // ForType returns a FieldSchema implementation for a given DTO type
-func (a *JsonSchamaProvider) ForType(dto any) httputil.FieldSchema {
+func (a *JsonSchamaProvider) ForType(dto any) router.FieldSchema {
 	t := reflect.TypeOf(dto)
 	if t == nil {
 		return &SchemaWrapper{
