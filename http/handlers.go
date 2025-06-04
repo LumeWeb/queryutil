@@ -110,6 +110,6 @@ func ProcessListRequest[T any, D any](
 	SetContentRangeHeader(w, entityName, pagination, responses, total)
 
 	// Encode response using our enhanced JSON encoder
-	response := queryutil.BuildResponse[T](responses, total)
+	response := queryutil.BuildResponse[[]D](responses, total)
 	return EncodeJSON(w, response)
 }
