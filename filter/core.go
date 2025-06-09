@@ -3,9 +3,10 @@ package filter
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	"github.com/samber/lo"
+	"sort"
+	"strings"
+	"sync"
 )
 
 // Operator defines comparison operations for field values (eq, gt, contains, etc)
@@ -49,6 +50,41 @@ const (
 	WhereClauseType    ClauseType = iota // Direct field comparison clause
 	CompoundClauseType                   // Group of clauses combined with AND/OR/NOT
 )
+
+// operatorReverseMap provides reverse lookup from Operator to all its string representations
+var operatorReverseMap map[Operator][]string
+var operatorMapMutex sync.RWMutex
+
+// GetOperatorReverseMap returns a copy of the operator reverse map
+func GetOperatorReverseMap() map[Operator][]string {
+	operatorMapMutex.RLock()
+	defer operatorMapMutex.RUnlock()
+
+	return lo.MapValues(operatorReverseMap, func(v []string, _ Operator) []string {
+		return append([]string{}, v...)
+	})
+}
+
+func init() {
+	operatorMapMutex.Lock()
+	defer operatorMapMutex.Unlock()
+
+	// Sort the keys of OperatorMap to ensure deterministic inversion
+	keys := make([]string, 0, len(OperatorMap))
+	for k := range OperatorMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Create a temporary map for inversion that collects all aliases
+	tempMap := make(map[Operator][]string, len(OperatorMap))
+	for _, k := range keys {
+		op := OperatorMap[k]
+		tempMap[op] = append(tempMap[op], k)
+	}
+
+	operatorReverseMap = tempMap
+}
 
 // LogicalFilter represents a direct field comparison condition
 type LogicalFilter struct {
@@ -216,11 +252,8 @@ var OperatorMap = map[string]Operator{
 	"like":         OpContains, // Alias for contains
 }
 
-// OperatorReverseMap provides reverse lookup from Operator to its string representation
-var OperatorReverseMap = lo.Invert(OperatorMap)
-
 func (o Operator) String() string {
-    return string(o)
+	return string(o)
 }
 
 const (
