@@ -7,6 +7,29 @@ import (
 	"time"
 )
 
+var timeFormats = []string{
+	time.RFC3339,
+	"2006-01-02 15:04:05",                 // Basic datetime format
+	"2006-01-02",                          // Basic date format
+	"2006-01-02 15:04:05.999999999+00:00", // Common MySQL format with nanoseconds
+	"2006-01-02 15:04:05+00:00",           // MySQL format without nanoseconds
+	"2006-01-02 15:04:05.999999999",       // Without timezone
+	"2006-01-02 15:04:05.999999999 -0700 MST m=+0.000000000", // Go debug format with nanoseconds
+	"2006-01-02 15:04:05 -0700 MST m=+0.000000000",           // Go debug format without nanoseconds
+	"2006-01-02 15:04:05 -0700 MST",                          // Shorter Go debug format
+}
+
+// ParseTime attempts to parse a time string using multiple common formats
+func ParseTime(timeStr string) (time.Time, error) {
+	for _, format := range timeFormats {
+		t, err := time.Parse(format, timeStr)
+		if err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("failed to parse time '%s' with any known format", timeStr)
+}
+
 // Core predicate functions
 
 // Equal creates a 'field equals value' filter
@@ -533,10 +556,20 @@ func validateNumericOrTimeType(field string, value any) {
 	if isNumeric(value) {
 		return
 	}
+
+	// Check for time.Time directly
 	if _, ok := value.(time.Time); ok {
 		return
 	}
-	panic(fmt.Sprintf("%s: value must be numeric or time.Time, got %T", field, value))
+
+	// Try to parse string as time
+	if strVal, ok := value.(string); ok {
+		if _, err := ParseTime(strVal); err == nil {
+			return
+		}
+	}
+
+	panic(fmt.Sprintf("%s: value must be numeric, time.Time, or parseable time string, got %T (%v)", field, value, value))
 }
 
 func validateNumericPair(field string, value any) {

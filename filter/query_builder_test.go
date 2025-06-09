@@ -8,6 +8,83 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestValidateNumericOrTimeType(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   any
+		wantErr bool
+	}{
+		{
+			name:    "valid numeric int",
+			value:   42,
+			wantErr: false,
+		},
+		{
+			name:    "valid numeric float",
+			value:   3.14,
+			wantErr: false,
+		},
+		{
+			name:    "valid time.Time",
+			value:   time.Now(),
+			wantErr: false,
+		},
+		{
+			name:    "valid RFC3339 time string",
+			value:   "2025-06-09T12:34:56Z",
+			wantErr: false,
+		},
+		{
+			name:    "valid MySQL datetime string",
+			value:   "2025-06-09 12:34:56.789",
+			wantErr: false,
+		},
+		{
+			name:    "valid date string",
+			value:   "2025-06-09",
+			wantErr: false,
+		},
+		{
+			name:    "valid Go debug time string",
+			value:   time.Now().String(), // Generates current time in Go debug format
+			wantErr: false,
+		},
+		{
+			name:    "valid timezone-aware string",
+			value:   "2025-06-09T12:34:56+02:00",
+			wantErr: false,
+		},
+		{
+			name:    "invalid string",
+			value:   "not a time",
+			wantErr: true,
+		},
+		{
+			name:    "invalid type",
+			value:   []int{1, 2, 3},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					if !tt.wantErr {
+						t.Errorf("validateNumericOrTimeType() panicked unexpectedly: %v", r)
+					}
+				}
+			}()
+
+			validateNumericOrTimeType("test_field", tt.value)
+
+			if tt.wantErr {
+				t.Error("validateNumericOrTimeType() should have panicked but didn't")
+			}
+		})
+	}
+}
+
 func TestQueryBuilderFunctions(t *testing.T) {
 	t.Run("EqualityFilters", func(t *testing.T) {
 		tests := []struct {
