@@ -29,6 +29,23 @@ func TestFindFilter(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
+	t.Run("shallow find with operator - existing", func(t *testing.T) {
+		result := FindFilterWithOperator(filters, "status", filter.OpEq)
+		assert.NotNil(t, result)
+		assert.Equal(t, "status", result.GetField())
+		assert.Equal(t, filter.OpEq, result.GetOperator())
+	})
+
+	t.Run("shallow find with operator - non-existing operator", func(t *testing.T) {
+		result := FindFilterWithOperator(filters, "status", filter.OpGt)
+		assert.Nil(t, result)
+	})
+
+	t.Run("shallow find with operator - non-existing field", func(t *testing.T) {
+		result := FindFilterWithOperator(filters, "city", filter.OpEq)
+		assert.Nil(t, result)
+	})
+
 	// Test cases for FindFilters
 	t.Run("shallow finds - existing field", func(t *testing.T) {
 		results := FindFilters(filters, "status")
@@ -39,6 +56,24 @@ func TestFindFilter(t *testing.T) {
 
 	t.Run("shallow finds - non-existing field", func(t *testing.T) {
 		results := FindFilters(filters, "city")
+		assert.Empty(t, results)
+	})
+
+	t.Run("shallow finds with operator - existing", func(t *testing.T) {
+		results := FindFiltersWithOperator(filters, "status", filter.OpEq)
+		assert.NotEmpty(t, results)
+		assert.Len(t, results, 1)
+		assert.Equal(t, "status", results[0].GetField())
+		assert.Equal(t, filter.OpEq, results[0].GetOperator())
+	})
+
+	t.Run("shallow finds with operator - non-existing operator", func(t *testing.T) {
+		results := FindFiltersWithOperator(filters, "status", filter.OpGt)
+		assert.Empty(t, results)
+	})
+
+	t.Run("shallow finds with operator - non-existing field", func(t *testing.T) {
+		results := FindFiltersWithOperator(filters, "city", filter.OpEq)
 		assert.Empty(t, results)
 	})
 
@@ -54,6 +89,23 @@ func TestFindFilter(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
+	t.Run("deep find with operator - existing", func(t *testing.T) {
+		result := DeepFindFilterWithOperator(filters, "age", filter.OpGte)
+		assert.NotNil(t, result)
+		assert.Equal(t, "age", result.GetField())
+		assert.Equal(t, filter.OpGte, result.GetOperator())
+	})
+
+	t.Run("deep find with operator - non-existing operator", func(t *testing.T) {
+		result := DeepFindFilterWithOperator(filters, "age", filter.OpLt)
+		assert.Nil(t, result)
+	})
+
+	t.Run("deep find with operator - non-existing field", func(t *testing.T) {
+		result := DeepFindFilterWithOperator(filters, "city", filter.OpEq)
+		assert.Nil(t, result)
+	})
+
 	// Test cases for DeepFindFilters
 	t.Run("deep finds - existing field", func(t *testing.T) {
 		results := DeepFindFilters(filters, "country")
@@ -64,6 +116,24 @@ func TestFindFilter(t *testing.T) {
 
 	t.Run("deep finds - non-existing field", func(t *testing.T) {
 		results := DeepFindFilters(filters, "city")
+		assert.Empty(t, results)
+	})
+
+	t.Run("deep finds with operator - existing", func(t *testing.T) {
+		results := DeepFindFiltersWithOperator(filters, "age", filter.OpGte)
+		assert.NotEmpty(t, results)
+		assert.Len(t, results, 1)
+		assert.Equal(t, "age", results[0].GetField())
+		assert.Equal(t, filter.OpGte, results[0].GetOperator())
+	})
+
+	t.Run("deep finds with operator - non-existing operator", func(t *testing.T) {
+		results := DeepFindFiltersWithOperator(filters, "age", filter.OpLt)
+		assert.Empty(t, results)
+	})
+
+	t.Run("deep finds with operator - non-existing field", func(t *testing.T) {
+		results := DeepFindFiltersWithOperator(filters, "city", filter.OpEq)
 		assert.Empty(t, results)
 	})
 
