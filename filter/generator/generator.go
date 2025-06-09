@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/samber/lo"
 	"go.lumeweb.com/queryutil/filter"
@@ -115,28 +116,40 @@ func (g *queryGenerator) processConditionalFilter(f *filter.ConditionalFilter, p
 
 // getFilterValues converts filter values to URL-encoded strings
 func (g *queryGenerator) getFilterValues(f *filter.LogicalFilter) ([]string, error) {
+	formatValue := func(v any) string {
+		if t, ok := v.(time.Time); ok {
+			return t.Format(time.RFC3339)
+		}
+		return fmt.Sprint(v)
+	}
+
 	switch val := f.Value().(type) {
 	case []any: // For "in" and "between"
 		if f.Operator() == filter.OpBetween || f.Operator() == filter.OpNbetween {
 			if len(val) != 2 {
 				return nil, fmt.Errorf("between operator requires exactly 2 values")
 			}
-			// Validate between values are numeric before encoding
-			if _, err := strconv.ParseFloat(fmt.Sprint(val[0]), 64); err != nil {
-				return nil, fmt.Errorf("between operator requires numeric values")
-			}
-			if _, err := strconv.ParseFloat(fmt.Sprint(val[1]), 64); err != nil {
-				return nil, fmt.Errorf("between operator requires numeric values")
+			// Skip numeric validation if values are time.Time
+			_, isTime1 := val[0].(time.Time)
+			_, isTime2 := val[1].(time.Time)
+			if !isTime1 && !isTime2 {
+				// Validate between values are numeric if not time.Time
+				if _, err := strconv.ParseFloat(formatValue(val[0]), 64); err != nil {
+					return nil, fmt.Errorf("between operator requires numeric or time values")
+				}
+				if _, err := strconv.ParseFloat(formatValue(val[1]), 64); err != nil {
+					return nil, fmt.Errorf("between operator requires numeric or time values")
+				}
 			}
 		}
 		values := lo.Map(val, func(item any, _ int) string {
-			return url.QueryEscape(fmt.Sprint(item))
+			return url.QueryEscape(formatValue(item))
 		})
 		return values, nil
 	case nil: // For null/nnull operators
 		return []string{""}, nil
 	default:
-		return []string{url.QueryEscape(fmt.Sprint(f.Value()))}, nil
+		return []string{url.QueryEscape(formatValue(f.Value()))}, nil
 	}
 }
 
