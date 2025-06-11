@@ -4,6 +4,7 @@ import (
 	"go.lumeweb.com/queryutil"
 	"go.lumeweb.com/queryutil/filter/parser"
 	"net/http"
+	"strconv"
 )
 
 // ParseRequestHTTP parses query parameters from an http.Request.
@@ -39,4 +40,5 @@ func SetContentRangeHeader(w http.ResponseWriter, entityName string, pagination 
 	resultCount := queryutil.GetResultCount(data)
 	contentRange := queryutil.FormatContentRange(entityName, pagination, resultCount, int(totalCount))
 	w.Header().Set("Content-Range", contentRange)
+	w.Header().Set("X-Total-Count", strconv.Itoa(resultCount))
 }
