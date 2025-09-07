@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+
 	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/gorm"
 )
@@ -22,18 +23,18 @@ var operatorMap = map[filter.Operator]string{
 	filter.OpGt:           "> ?",
 	filter.OpLte:          "<= ?",
 	filter.OpGte:          ">= ?",
-	filter.OpContains:     "LIKE ?",
-	filter.OpContainss:    "LIKE ?",
-	filter.OpNcontains:    "NOT LIKE ?",
-	filter.OpNcontainss:   "NOT LIKE ?",
-	filter.OpStartswith:   "LIKE ?",
-	filter.OpStartswiths:  "LIKE ?",
-	filter.OpNstartswith:  "NOT LIKE ?",
-	filter.OpNstartswiths: "NOT LIKE ?",
-	filter.OpEndswith:     "LIKE ?",
-	filter.OpEndswiths:    "LIKE ?",
-	filter.OpNendswith:    "NOT LIKE ?",
-	filter.OpNendswiths:   "NOT LIKE ?",
+	filter.OpContains:     "LIKE ? COLLATE NOCASE",
+	filter.OpContainss:    "LIKE ? COLLATE BINARY",
+	filter.OpNcontains:    "NOT LIKE ? COLLATE NOCASE",
+	filter.OpNcontainss:   "NOT LIKE ? COLLATE BINARY",
+	filter.OpStartswith:   "LIKE ? COLLATE NOCASE",
+	filter.OpStartswiths:  "LIKE ? COLLATE BINARY",
+	filter.OpNstartswith:  "NOT LIKE ? COLLATE NOCASE",
+	filter.OpNstartswiths: "NOT LIKE ? COLLATE BINARY",
+	filter.OpEndswith:     "LIKE ? COLLATE NOCASE",
+	filter.OpEndswiths:    "LIKE ? COLLATE BINARY",
+	filter.OpNendswith:    "NOT LIKE ? COLLATE NOCASE",
+	filter.OpNendswiths:   "NOT LIKE ? COLLATE BINARY",
 	filter.OpNull:         sqlIsNull,
 	filter.OpNnull:        sqlIsNotNull,
 	filter.OpIn:           sqlIn,
@@ -259,11 +260,8 @@ func formatValue(op filter.Operator, value any) any {
 
 	// Handle string pattern matching operators
 	switch op {
-	case filter.OpContains, filter.OpNcontains:
+	case filter.OpContains, filter.OpNcontains, filter.OpContainss, filter.OpNcontainss:
 		return fmt.Sprintf("%%%v%%", value) // %value%
-	case filter.OpContainss, filter.OpNcontainss:
-		// Case-sensitive contains - GORM/SQL handles this based on collation. No '%' needed here.
-		return value
 	case filter.OpStartswith, filter.OpStartswiths, filter.OpNstartswith, filter.OpNstartswiths:
 		return fmt.Sprintf("%v%%", value) // value%
 	case filter.OpEndswith, filter.OpEndswiths, filter.OpNendswith, filter.OpNendswiths:
