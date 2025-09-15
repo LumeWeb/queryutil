@@ -2,8 +2,10 @@ package builder
 
 import (
 	"fmt"
+	"strings"
 
 	"go.lumeweb.com/queryutil/filter"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -116,6 +118,9 @@ func (b *GORMBuilder) buildClauseCondition(clause filter.Clause) (*gorm.DB, erro
 			// All other standard operators expect parameters spread variadically
 			return conditionBuilderDB.Where(fmt.Sprintf("%s %s", c.Field, c.Query), c.Params...), nil
 		}
+	case *GormConditionClause:
+		// For pre-built GORM conditions, just return the condition as is
+		return c.Condition, nil
 	case *CompoundClause:
 		switch c.Operator {
 		case filter.LogicalAnd:
@@ -190,6 +195,11 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 		}
 
 		return NewCompoundClause(filter.LogicalOr, clauses), nil
+	}
+
+	// Check if this is a JSON path field (contains dot notation)
+	if isJSONPath(f.Field()) {
+		return b.buildJSONClause(f)
 	}
 
 	// For all other logical filters, build a single SQL clause
@@ -270,4 +280,89 @@ func formatValue(op filter.Operator, value any) any {
 
 	// For all other operators (Eq, Ne, Lt, Gt, Lte, Gte, In, Nin), return the value as is.
 	return value
+}
+
+// isJSONPath checks if a field name represents a JSON path (contains dot notation)
+func isJSONPath(field string) bool {
+	return strings.Contains(field, ".")
+}
+
+// parseJSONPath splits a JSON path field into column name and path components
+func parseJSONPath(field string) (jsonColumn, jsonPath string) {
+	parts := strings.SplitN(field, ".", 2)
+	return parts[0], parts[1]
+}
+
+// buildJSONQuery creates a JSON query expression for the given operator and parameters
+func (b *GORMBuilder) buildJSONQuery(operator, jsonColumn, jsonPath string, value any) (string, []any) {
+	// For SQLite, use json_extract()
+	// For MySQL, use JSON_EXTRACT()
+	extractFunc := "JSON_EXTRACT"
+	if b.baseTx.Dialector.Name() == "sqlite" {
+		extractFunc = "json_extract"
+	}
+
+	query := fmt.Sprintf("%s(%s, ?) %s ?", extractFunc, jsonColumn, operator)
+	params := []any{"$." + jsonPath, value}
+
+	return query, params
+}
+
+// buildJSONClause creates a GORM condition for JSON path fields
+func (b *GORMBuilder) buildJSONClause(f *filter.LogicalFilter) (filter.Clause, error) {
+	jsonColumn, jsonPath := parseJSONPath(f.Field())
+
+	// Create a new session for building the JSON query
+	conditionBuilderDB := b.baseTx.Session(&gorm.Session{NewDB: true})
+
+	// Handle different operators using datatypes.JSONQuery methods
+	switch f.Operator() {
+	case filter.OpEq:
+		condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Equals(f.Value(), jsonPath))
+		return NewGormConditionClause(condition, f.Field()), nil
+	case filter.OpNe:
+		condition := conditionBuilderDB.Where(b.buildJSONQuery("<> ?", jsonColumn, jsonPath, f.Value()))
+		return NewGormConditionClause(condition, f.Field()), nil
+	case filter.OpGt:
+		query, params := b.buildJSONQuery(">", jsonColumn, jsonPath, f.Value())
+		return NewSQLClause(query, "", params...), nil
+	case filter.OpGte:
+		query, params := b.buildJSONQuery(">=", jsonColumn, jsonPath, f.Value())
+		return NewSQLClause(query, "", params...), nil
+	case filter.OpLt:
+		query, params := b.buildJSONQuery("<", jsonColumn, jsonPath, f.Value())
+		return NewSQLClause(query, "", params...), nil
+	case filter.OpLte:
+		query, params := b.buildJSONQuery("<=", jsonColumn, jsonPath, f.Value())
+		return NewSQLClause(query, "", params...), nil
+	case filter.OpNull:
+		condition := conditionBuilderDB.Where("? IS NULL", datatypes.JSONQuery(jsonColumn).Extract(jsonPath))
+		return NewGormConditionClause(condition, f.Field()), nil
+	case filter.OpNnull:
+		condition := conditionBuilderDB.Where("? IS NOT NULL", datatypes.JSONQuery(jsonColumn).Extract(jsonPath))
+		return NewGormConditionClause(condition, f.Field()), nil
+	default:
+		// For pattern matching operators, we need to handle them specially
+		switch f.Operator() {
+		case filter.OpContains, filter.OpContainss:
+			condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%%%v%%", f.Value()), jsonPath))
+			return NewGormConditionClause(condition, f.Field()), nil
+		case filter.OpNcontains, filter.OpNcontainss:
+			// For NOT LIKE operations, we need to negate the LIKE condition
+			jsonQuery := datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%%%v%%", f.Value()), jsonPath)
+			condition := conditionBuilderDB.Where("NOT (?)", jsonQuery)
+			return NewGormConditionClause(condition, f.Field()), nil
+		case filter.OpStartswith, filter.OpStartswiths, filter.OpNstartswith, filter.OpNstartswiths:
+			// Handle startswith by using LIKE with appropriate pattern
+			condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%v%%", f.Value()), jsonPath))
+			return NewGormConditionClause(condition, f.Field()), nil
+		case filter.OpEndswith, filter.OpEndswiths, filter.OpNendswith, filter.OpNendswiths:
+			// Handle endswith by using LIKE with appropriate pattern
+			condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%%%v", f.Value()), jsonPath))
+			return NewGormConditionClause(condition, f.Field()), nil
+		default:
+			// If we get here, the operator is not supported for JSON fields
+			return nil, fmt.Errorf("unsupported operator for JSON field: %s", f.Operator())
+		}
+	}
 }

@@ -1,23 +1,27 @@
 package builder
 
 import (
-	"github.com/stretchr/testify/assert"
-	"go.lumeweb.com/queryutil/filter"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 	"sort"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.lumeweb.com/queryutil/filter"
+	"gorm.io/datatypes"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestGORMBuilder_ApplyFilters(t *testing.T) {
 	type User struct {
-		ID      uint
-		Name    string
-		Email   string
-		Bio     string
-		Age     int
-		Status  string
-		Deleted bool
+		ID       uint
+		Name     string
+		Email    string
+		Bio      string
+		Age      int
+		Status   string
+		Deleted  bool
+		Metadata datatypes.JSON
 	}
 
 	// Open database connection with logger
@@ -25,25 +29,156 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if sqlDB, cerr := db.DB(); cerr == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 
 	err = db.AutoMigrate(&User{})
 	if err != nil {
 		t.Fatal(err) // Changed from t.Error to t.Fatal as migration failure is critical
 	}
 
-	// Seed data
-	db.Create(&User{Name: "John Doe", Email: "john@example.com", Bio: "Developer", Age: 35, Status: "active", Deleted: false})
-	db.Create(&User{Name: "Jane Smith", Email: "jane@example.com", Bio: "Designer", Age: 25, Status: "inactive", Deleted: false})
-	db.Create(&User{Name: "Peter Jones", Email: "peter@test.com", Bio: "Consultant", Age: 40, Status: "active", Deleted: true}) // Added a third user for better testing
+	// Seed data with proper JSON construction and error checking
+	result := db.Create(&User{
+		Name:     "John Doe",
+		Email:    "john@example.com",
+		Bio:      "Developer",
+		Age:      35,
+		Status:   "active",
+		Deleted:  false,
+		Metadata: datatypes.JSON([]byte(`{"total_steps": 10000, "preferences": {"theme": "dark"}, "tags": ["admin", "user"]}`)),
+	})
+	require.NoError(t, result.Error)
+
+	result = db.Create(&User{
+		Name:     "Jane Smith",
+		Email:    "jane@example.com",
+		Bio:      "Designer",
+		Age:      25,
+		Status:   "inactive",
+		Deleted:  false,
+		Metadata: datatypes.JSON([]byte(`{"total_steps": 5000, "preferences": {"theme": "light"}, "tags": ["user"]}`)),
+	})
+	require.NoError(t, result.Error)
+
+	result = db.Create(&User{
+		Name:     "Peter Jones",
+		Email:    "peter@test.com",
+		Bio:      "Consultant",
+		Age:      40,
+		Status:   "active",
+		Deleted:  true,
+		Metadata: datatypes.JSON([]byte(`{"total_steps": 15000, "preferences": {"theme": "dark"}, "tags": ["admin", "premium"]}`)),
+	})
+	require.NoError(t, result.Error)
 
 	tests := []struct {
 		name         string
 		filters      []filter.CrudFilter // Now defined using constructors
 		searchConfig *filter.GlobalSearchConfig
 		wantCount    int64
+		wantErr      bool // Explicitly indicate whether an error is expected
 		// Optional: Add a function to verify specific results if needed beyond count
 		verify func(*testing.T, []User)
 	}{
+		{
+			name: "json equality filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.total_steps", filter.OpEq, 10000),
+			},
+			searchConfig: nil,
+			wantCount:    1,
+			verify: func(t *testing.T, users []User) {
+				if assert.Len(t, users, 1) {
+					assert.Equal(t, "John Doe", users[0].Name)
+				}
+			},
+		},
+		{
+			name: "json array contains filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.tags", filter.OpContains, "admin"),
+			},
+			searchConfig: nil,
+			wantCount:    2, // John Doe and Peter Jones have "admin" tag
+			wantErr:      false,
+			verify: func(t *testing.T, users []User) {
+				sort.SliceStable(users, func(i, j int) bool {
+					return users[i].Name < users[j].Name
+				})
+				assert.Len(t, users, 2)
+				assert.Equal(t, "John Doe", users[0].Name)
+				assert.Equal(t, "Peter Jones", users[1].Name)
+			},
+		},
+		{
+			name: "json greater than filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.total_steps", filter.OpGt, 10000),
+			},
+			searchConfig: nil,
+			wantCount:    1, // Only Peter Jones (15000)
+			verify: func(t *testing.T, users []User) {
+				if assert.Len(t, users, 1) {
+					assert.Equal(t, "Peter Jones", users[0].Name)
+				}
+			},
+		},
+		{
+			name: "json less than filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.total_steps", filter.OpLt, 10000),
+			},
+			searchConfig: nil,
+			wantCount:    1, // Only Jane Smith (5000)
+			verify: func(t *testing.T, users []User) {
+				if assert.Len(t, users, 1) {
+					assert.Equal(t, "Jane Smith", users[0].Name)
+				}
+			},
+		},
+		{
+			name: "json contains filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.preferences.theme", filter.OpContains, "dark"),
+			},
+			searchConfig: nil,
+			wantCount:    2, // John Doe and Peter Jones
+			verify: func(t *testing.T, users []User) {
+				sort.SliceStable(users, func(i, j int) bool {
+					return users[i].Name < users[j].Name
+				})
+				assert.Len(t, users, 2)
+				assert.Equal(t, "John Doe", users[0].Name)
+				assert.Equal(t, "Peter Jones", users[1].Name)
+			},
+		},
+		{
+			name: "json not contains filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.preferences.theme", filter.OpNcontains, "dark"),
+			},
+			searchConfig: nil,
+			wantCount:    1, // Only Jane Smith (light theme)
+			verify: func(t *testing.T, users []User) {
+				if assert.Len(t, users, 1) {
+					assert.Equal(t, "Jane Smith", users[0].Name)
+				}
+			},
+		},
+		{
+			name: "json not contains case-sensitive filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.preferences.theme", filter.OpNcontainss, "Dark"),
+			},
+			searchConfig: nil,
+			wantCount:    1, // Only Jane Smith (light theme) - case sensitive so "dark" != "Dark"
+			verify: func(t *testing.T, users []User) {
+				if assert.Len(t, users, 1) {
+					assert.Equal(t, "Jane Smith", users[0].Name)
+				}
+			},
+		},
 		{
 			name: "global search across multiple columns",
 			filters: []filter.CrudFilter{
@@ -205,6 +340,22 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			wantCount:    3, // All users have a non-null Age
 		},
 		{
+			name: "json null filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.missing_field", filter.OpNull, nil),
+			},
+			searchConfig: nil,
+			wantCount:    3, // All users as missing_field does not exist
+		},
+		{
+			name: "json not null filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.total_steps", filter.OpNnull, nil),
+			},
+			searchConfig: nil,
+			wantCount:    3, // All users have total_steps
+		},
+		{
 			name: "deleted boolean filter",
 			filters: []filter.CrudFilter{
 				filter.NewLogicalFilter("Deleted", filter.OpEq, true),
@@ -272,12 +423,22 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 		// Add more tests for other operators (gt, lt, gte, lte, nin, nbetween, etc.)
 		// and more complex combinations.
 		{
+			name: "json field with explicit null value",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.nullable_field", filter.OpNull, nil),
+			},
+			searchConfig: nil,
+			wantCount:    0, // Assuming no users have explicit null in their JSON
+			wantErr:      false,
+		},
+		{
 			name: "greater than filter",
 			filters: []filter.CrudFilter{
 				filter.NewLogicalFilter("Age", filter.OpGt, 35),
 			},
 			searchConfig: nil,
 			wantCount:    1, // Peter Jones (40)
+			wantErr:      false,
 			verify: func(t *testing.T, users []User) {
 				assert.Len(t, users, 1)
 				assert.Equal(t, "Peter Jones", users[0].Name)
@@ -290,6 +451,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			},
 			searchConfig: nil,
 			wantCount:    1, // Jane Smith (25)
+			wantErr:      false,
 			verify: func(t *testing.T, users []User) {
 				assert.Len(t, users, 1)
 				assert.Equal(t, "Jane Smith", users[0].Name)
@@ -302,6 +464,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			},
 			searchConfig: nil,
 			wantCount:    2, // John Doe (35), Peter Jones (40)
+			wantErr:      false,
 			verify: func(t *testing.T, users []User) {
 				sort.SliceStable(users, func(i, j int) bool { return users[i].Name < users[j].Name })
 				assert.Len(t, users, 2)
@@ -316,6 +479,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			},
 			searchConfig: nil,
 			wantCount:    2, // John Doe (35), Jane Smith (25)
+			wantErr:      false,
 			verify: func(t *testing.T, users []User) {
 				sort.SliceStable(users, func(i, j int) bool { return users[i].Name < users[j].Name })
 				assert.Len(t, users, 2)
@@ -330,6 +494,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			},
 			searchConfig: nil,
 			wantCount:    1, // Peter Jones
+			wantErr:      false,
 			verify: func(t *testing.T, users []User) {
 				assert.Len(t, users, 1)
 				assert.Equal(t, "Peter Jones", users[0].Name)
@@ -342,6 +507,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			},
 			searchConfig: nil,
 			wantCount:    2, // Jane Smith (25), Peter Jones (40)
+			wantErr:      false,
 			verify: func(t *testing.T, users []User) {
 				sort.SliceStable(users, func(i, j int) bool { return users[i].Name < users[j].Name })
 				assert.Len(t, users, 2)
@@ -354,11 +520,13 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			name:      "nil filters slice",
 			filters:   nil,
 			wantCount: 3, // All users
+			wantErr:   false,
 		},
 		{
 			name:      "empty filters slice",
 			filters:   []filter.CrudFilter{},
 			wantCount: 3, // All users
+			wantErr:   false,
 		},
 		{
 			name: "conditional filter with nil filters",
@@ -366,6 +534,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 				filter.NewConditionalFilter(filter.LogicalAnd, nil),
 			},
 			wantCount: 3, // Should likely apply no condition, returning all users, or potentially error depending on builder logic
+			wantErr:   false,
 			// Assuming it applies no condition if filter list is nil/empty for conditional filters.
 			// If the builder returns an error for nil/empty filter list in a conditional, adjust wantErr=true.
 		},
@@ -375,6 +544,88 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 				filter.NewConditionalFilter(filter.LogicalAnd, []filter.CrudFilter{}),
 			},
 			wantCount: 3, // Should likely apply no condition
+			wantErr:   false,
+		},
+		{
+			name: "json startswith filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.preferences.theme", filter.OpStartswith, "dar"),
+			},
+			searchConfig: nil,
+			wantCount:    2, // John Doe and Peter Jones have "dark" theme
+			wantErr:      false,
+			verify: func(t *testing.T, users []User) {
+				sort.SliceStable(users, func(i, j int) bool {
+					return users[i].Name < users[j].Name
+				})
+				assert.Len(t, users, 2)
+				assert.Equal(t, "John Doe", users[0].Name)
+				assert.Equal(t, "Peter Jones", users[1].Name)
+			},
+		},
+		{
+			name: "json endswith filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.preferences.theme", filter.OpEndswith, "ght"),
+			},
+			searchConfig: nil,
+			wantCount:    1, // Jane Smith has "light" theme
+			wantErr:      false,
+			verify: func(t *testing.T, users []User) {
+				assert.Len(t, users, 1)
+				assert.Equal(t, "Jane Smith", users[0].Name)
+			},
+		},
+		{
+			name: "json non-existent path filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.non_existent_field", filter.OpEq, "value"),
+			},
+			searchConfig: nil,
+			wantCount:    0, // Should return no results for non-existent paths
+			wantErr:      false,
+			verify: func(t *testing.T, users []User) {
+				assert.Empty(t, users) // Expect no results
+			},
+		},
+		{
+			name: "json field with special characters in path",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.user-info", filter.OpEq, "test"),
+			},
+			searchConfig: nil,
+			wantCount:    0, // No users have user-info field
+			wantErr:      false,
+		},
+		{
+			name: "json deeply nested path filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.preferences.theme.dark_mode", filter.OpEq, true),
+			},
+			searchConfig: nil,
+			wantCount:    0, // No users have this deeply nested field
+			wantErr:      false,
+		},
+		{
+			name: "json field with numeric keys",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.123", filter.OpEq, "value"),
+			},
+			searchConfig: nil,
+			wantCount:    0, // No users have field with numeric key
+			wantErr:      false,
+		},
+		{
+			name: "json non-existent path filter",
+			filters: []filter.CrudFilter{
+				filter.NewLogicalFilter("metadata.non_existent_field", filter.OpEq, "value"),
+			},
+			searchConfig: nil,
+			wantCount:    0, // Should return no results for non-existent paths
+			wantErr:      false,
+			verify: func(t *testing.T, users []User) {
+				assert.Empty(t, users) // Expect no results
+			},
 		},
 	}
 
@@ -390,14 +641,11 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			// Let's assume for now that structural errors are caught in Apply and database errors during Find.
 
 			// Check for early errors from Apply if any were introduced
-			if errApply != nil {
-				if tt.wantCount > 0 { // If we expected results, an early error is unexpected
-					assert.Fail(t, "Unexpected error from Apply", "Error: %v", errApply)
-				} else {
-					assert.Error(t, errApply)
-					// No need to query the database if Apply failed as expected
-				}
-				return // Exit the test case if Apply failed
+			if tt.wantErr {
+				assert.Error(t, errApply)
+				return // Exit the test case if Apply failed as expected
+			} else {
+				assert.NoError(t, errApply, "Apply returned unexpected error")
 			}
 
 			var users []User
