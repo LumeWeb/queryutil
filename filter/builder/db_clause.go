@@ -1,6 +1,9 @@
 package builder
 
-import "go.lumeweb.com/queryutil/filter"
+import (
+	"go.lumeweb.com/queryutil/filter"
+	"gorm.io/gorm"
+)
 
 // CompoundClause represents a logical combination of clauses (e.g., AND, OR, NOT).
 // It's an internal representation built by the visitor methods.
@@ -45,5 +48,23 @@ func NewSQLClause(query string, field string, params ...any) *SQLClause {
 }
 
 func (sc *SQLClause) Type() filter.ClauseType {
+	return filter.WhereClauseType
+}
+
+// GormConditionClause represents a pre-built GORM condition.
+// This is used for complex conditions like JSON queries that need special handling.
+type GormConditionClause struct {
+	Condition *gorm.DB // The GORM DB query object representing the condition
+	Field     string   // The field name (e.g., "metadata.total_steps")
+}
+
+func NewGormConditionClause(condition *gorm.DB, field string) *GormConditionClause {
+	return &GormConditionClause{
+		Condition: condition,
+		Field:     field,
+	}
+}
+
+func (gcc *GormConditionClause) Type() filter.ClauseType {
 	return filter.WhereClauseType
 }
