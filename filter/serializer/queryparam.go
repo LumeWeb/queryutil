@@ -83,8 +83,8 @@ func (s *QueryParamSerializer) SerializeSorts(sorts []filter.Sort) (url.Values, 
 func (s *QueryParamSerializer) SerializePagination(pagination filter.Pagination) (url.Values, error) {
 	values := url.Values{}
 
-	values.Add("_start", strconv.Itoa(pagination.Start))
-	values.Add("_end", strconv.Itoa(pagination.End))
+	values.Add(filter.StartParamName, strconv.Itoa(pagination.Start))
+	values.Add(filter.EndParamName, strconv.Itoa(pagination.End))
 
 	return values, nil
 }
@@ -171,7 +171,7 @@ func (s *QueryParamSerializer) formatValue(value any) string {
 		for _, item := range v {
 			result = append(result, s.formatValue(item))
 		}
-		return fmt.Sprintf("%v", result) // This will be handled differently for array operators
+		return fmt.Sprintf("%v", result) // Defensive: non-array operators should not receive []any
 	default:
 		return fmt.Sprintf("%v", v)
 	}
