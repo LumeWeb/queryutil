@@ -6,6 +6,12 @@ import (
 	"strconv"
 )
 
+// Pagination parameter names used in URL query strings
+const (
+	StartParamName = "_start"
+	EndParamName   = "_end"
+)
+
 // Pagination represents server-side pagination parameters
 type Pagination struct {
 	Start    int    // Starting record index (inclusive)
@@ -16,10 +22,10 @@ type Pagination struct {
 
 // Standard presets
 var (
-	DefaultPagination   = newPagination(0, 10)   // 10 items
-	LargePagination     = newPagination(0, 100)  // 100 items
-	XLargePagination    = newPagination(0, 200)  // 200 items
-	XXLargePagination   = newPagination(0, 500)  // 500 items
+	DefaultPagination = newPagination(0, 10)  // 10 items
+	LargePagination   = newPagination(0, 100) // 100 items
+	XLargePagination  = newPagination(0, 200) // 200 items
+	XXLargePagination = newPagination(0, 500) // 500 items
 )
 
 // NewPagination creates a validated pagination configuration
@@ -30,7 +36,7 @@ func NewPagination(start, pageSize int) (Pagination, error) {
 	if start < 0 {
 		return Pagination{}, fmt.Errorf("invalid start: %d - must be >= 0", start)
 	}
-	
+
 	return newPagination(start, pageSize), nil
 }
 
