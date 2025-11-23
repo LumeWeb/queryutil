@@ -470,7 +470,9 @@ func TestQueryParamSerializer_Options(t *testing.T) {
 
 // assertFiltersEqual compares two slices of CrudFilter for equality
 func assertFiltersEqual(t *testing.T, expected, actual []filter.CrudFilter) {
-	assert.Equal(t, len(expected), len(actual), "Filter count mismatch")
+	if !assert.Equal(t, len(expected), len(actual), "Filter count mismatch") {
+		return
+	}
 
 	for i, expectedFilter := range expected {
 		actualFilter := actual[i]
@@ -534,7 +536,9 @@ func assertPaginationEqual(t *testing.T, expected, actual filter.Pagination) {
 
 // assertSortsEqual compares two slices of Sort for equality
 func assertSortsEqual(t *testing.T, expected, actual []filter.Sort) {
-	assert.Equal(t, len(expected), len(actual), "Sort count mismatch")
+	if !assert.Equal(t, len(expected), len(actual), "Sort count mismatch") {
+		return
+	}
 
 	for i, expectedSort := range expected {
 		actualSort := actual[i]

@@ -122,6 +122,9 @@ func (s *QueryParamSerializer) serializeLogicalFilter(logicalFilter *filter.Logi
 				}
 				return nil
 			}
+			// Fail fast with descriptive error when array is required but not provided
+			return fmt.Errorf("operator %s requires array value for field %s, but got %T",
+				logicalFilter.Operator(), logicalFilter.GetField(), logicalFilter.GetValue())
 		}
 
 		values.Add(operatorKey, s.formatValue(logicalFilter.GetValue()))
