@@ -16,10 +16,16 @@ const (
 	OrderDesc SortOrder = "desc"
 )
 
+// Sort parameter names used in URL query strings
+const (
+	SortParamName  = "_sort"
+	OrderParamName = "_order"
+)
+
 // Sort represents a field sorting configuration
 type Sort struct {
-	Field string     // Field name to sort by
-	Order SortOrder  // Sorting direction (asc/desc)
+	Field string    // Field name to sort by
+	Order SortOrder // Sorting direction (asc/desc)
 }
 
 // SortConfig defines valid sort fields and order directions
