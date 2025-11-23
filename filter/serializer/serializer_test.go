@@ -3,7 +3,6 @@ package serializer
 import (
 	"fmt"
 	"net/url"
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -229,11 +228,8 @@ func TestQueryParamSerializer_SerializeFilters(t *testing.T) {
 
 			assert.NoError(t, err)
 
-			// Normalize both expected and result for comparison
-			normalizedExpected := normalizeValues(tt.expected)
-			normalizedResult := normalizeValues(result)
-
-			assert.Equal(t, normalizedExpected, normalizedResult)
+			// Compare url.Values directly (map equality is order-independent)
+			assert.Equal(t, tt.expected, result)
 
 			// Interop test: serialize -> re-parse -> compare
 			t.Run("interop", func(t *testing.T) {
@@ -562,28 +558,4 @@ func assertValuesEqual(t *testing.T, expected, actual any, msg string) {
 	default:
 		assert.Equal(t, expected, actual, msg)
 	}
-}
-
-// normalizeValues normalizes url.Values for consistent comparison
-// by sorting keys and values since map iteration order is not guaranteed
-func normalizeValues(values url.Values) url.Values {
-	normalized := url.Values{}
-
-	// Sort keys for consistent ordering
-	var keys []string
-	for k := range values {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		// Sort values for each key
-		vals := values[k]
-		sort.Strings(vals)
-		for _, v := range vals {
-			normalized.Add(k, v)
-		}
-	}
-
-	return normalized
 }

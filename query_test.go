@@ -282,6 +282,24 @@ func TestBuildURL(t *testing.T) {
 			expectedURL: "https://api.example.com/users?_end=10&_start=0&filters%5Bage%5D%5Bne%5D=20",
 			expectError: false,
 		},
+		{
+			name:        "base URL with existing query parameters",
+			baseURL:     "https://api.example.com/users?foo=bar&baz=qux",
+			sorts:       []Sort{{Field: "name", Order: OrderAsc}},
+			pagination:  nil,
+			filters:     []CrudFilter{NewLogicalFilter("age", OpGte, 18)},
+			expectedURL: "https://api.example.com/users?_end=10&_order=asc&_sort=name&_start=0&baz=qux&filters%5Bage%5D%5Bgte%5D=18&foo=bar",
+			expectError: false,
+		},
+		{
+			name:        "invalid baseURL",
+			baseURL:     "://bad",
+			sorts:       nil,
+			pagination:  nil,
+			filters:     nil,
+			expectedURL: "",
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {

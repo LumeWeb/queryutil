@@ -21,7 +21,7 @@ type QueryParamSerializer struct {
 //   - WithSortPrefix() to customize sort parameter prefix
 func NewQueryParamSerializer(opts ...SerializerOption) *QueryParamSerializer {
 	return &QueryParamSerializer{
-		config: ApplySerializerOptions(opts),
+		config: ApplySerializerOptions(opts...),
 	}
 }
 
@@ -45,6 +45,7 @@ func (s *QueryParamSerializer) SerializeFilters(filters []filter.CrudFilter) (ur
 // SerializeSorts converts sort structures to URL query parameters.
 // Formats sort parameters according to the configured prefix.
 // Uses standard _sort and _order format when default prefix is used.
+// Note: "sort" prefix enables _sort/_order style, while any other prefix uses legacy prefix[index]=field:order format.
 func (s *QueryParamSerializer) SerializeSorts(sorts []filter.Sort) (url.Values, error) {
 	values := url.Values{}
 
@@ -90,11 +91,11 @@ func (s *QueryParamSerializer) SerializePagination(pagination filter.Pagination)
 
 // serializeFilter handles the serialization of individual filters with proper nesting
 func (s *QueryParamSerializer) serializeFilter(f filter.CrudFilter, values url.Values, prefix string, index int) error {
-	switch filter := f.(type) {
+	switch flt := f.(type) {
 	case *filter.LogicalFilter:
-		return s.serializeLogicalFilter(filter, values, prefix, index)
+		return s.serializeLogicalFilter(flt, values, prefix, index)
 	case *filter.ConditionalFilter:
-		return s.serializeConditionalFilter(filter, values, prefix, index)
+		return s.serializeConditionalFilter(flt, values, prefix, index)
 	default:
 		return fmt.Errorf("unsupported filter type: %T", f)
 	}
@@ -171,12 +172,4 @@ func (s *QueryParamSerializer) formatValue(value any) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
-}
-
-// serializeArrayValue handles array values for operators like IN, BETWEEN, etc.
-func (s *QueryParamSerializer) serializeArrayValue(value []any, values url.Values, key string) error {
-	for i, item := range value {
-		values.Add(key+"["+strconv.Itoa(i)+"]", s.formatValue(item))
-	}
-	return nil
 }

@@ -57,7 +57,7 @@ func WithSortPrefix(prefix string) SerializerOption {
 
 // ApplySerializerOptions processes serializer options by merging provided options with defaults.
 // Uses functional options pattern to configure serialization behavior.
-func ApplySerializerOptions(opts []SerializerOption) *SerializerOptions {
+func ApplySerializerOptions(opts ...SerializerOption) *SerializerOptions {
 	config := DefaultSerializerOptions()
 	for _, opt := range opts {
 		opt(&config)

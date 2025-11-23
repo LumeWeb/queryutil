@@ -55,6 +55,7 @@ func ToQueryString(params map[string][]string) string {
 // BuildURL creates a complete URL with query parameters for filters, sorts, and pagination.
 // It parses the base URL using url.Parse, then uses the QueryParamSerializer to convert
 // the structures to query parameters and merges them with any existing query parameters.
+// Later sources win on key clashes.
 //
 // Parameters:
 //   - baseURL: The base URL (e.g., "https://api.example.com/users" or "https://api.example.com/users?existing=param")
@@ -74,7 +75,7 @@ func ToQueryString(params map[string][]string) string {
 //	filters := []CrudFilter{NewLogicalFilter("age", OpGte, 18)}
 //
 //	url, err := BuildURL(baseURL, sorts, pagination, filters...)
-//	// Result: "https://api.example.com/users?_sort=name&_order=asc&_start=0&_end=10&filters[0][age][gte]=18"
+//	// Result: "https://api.example.com/users?_end=10&_order=asc&_sort=name&_start=0&filters[age][gte]=18"
 func BuildURL(baseURL string, sorts []Sort, pagination *filter.Pagination, filters ...CrudFilter) (string, error) {
 	// Parse the base URL to handle existing query parameters
 	parsedURL, err := url.Parse(baseURL)

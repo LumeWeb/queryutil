@@ -43,7 +43,7 @@ var ErrInvalidSortField = errors.New("invalid sort field")
 // Validates against SortConfig if provided.
 // Example URL: ?_sort=name,age&_order=asc,desc
 func ParseQuerySort(query map[string][]string, config *SortConfig) ([]Sort, error) {
-	sorts, ok := query["_sort"]
+	sorts, ok := query[SortParamName]
 	if !ok || len(sorts) == 0 {
 		return nil, nil
 	}
@@ -57,7 +57,7 @@ func ParseQuerySort(query map[string][]string, config *SortConfig) ([]Sort, erro
 		}
 	}
 
-	orders := query["_order"]
+	orders := query[OrderParamName]
 	fields := strings.Split(sorts[0], ",")
 
 	var orderValues []string
@@ -71,7 +71,7 @@ func ParseQuerySort(query map[string][]string, config *SortConfig) ([]Sort, erro
 		if i < len(orderValues) {
 			orderStr := strings.ToLower(orderValues[i])
 			if orderStr != string(OrderAsc) && orderStr != string(OrderDesc) {
-				return nil, NewSortError("_order", fmt.Sprintf("invalid order value: %s", orderValues[i]))
+				return nil, NewSortError(OrderParamName, fmt.Sprintf("invalid order value: %s", orderValues[i]))
 			}
 			order = SortOrder(orderStr)
 		}
