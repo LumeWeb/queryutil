@@ -18,13 +18,40 @@ const (
 	sqlBetween    = "BETWEEN ? AND ?"
 )
 
-var operatorMap = map[filter.Operator]string{
-	filter.OpEq:           "= ?",
-	filter.OpNe:           "<> ?",
-	filter.OpLt:           "< ?",
-	filter.OpGt:           "> ?",
-	filter.OpLte:          "<= ?",
-	filter.OpGte:          ">= ?",
+// Base operators that are common across all databases
+var baseOperators = map[filter.Operator]string{
+	filter.OpEq:       "= ?",
+	filter.OpNe:       "<> ?",
+	filter.OpLt:       "< ?",
+	filter.OpGt:       "> ?",
+	filter.OpLte:      "<= ?",
+	filter.OpGte:      ">= ?",
+	filter.OpNull:     sqlIsNull,
+	filter.OpNnull:    sqlIsNotNull,
+	filter.OpIn:       sqlIn,
+	filter.OpNin:      sqlNotIn,
+	filter.OpNbetween: sqlNotBetween,
+	filter.OpBetween:  sqlBetween,
+}
+
+// Default pattern matching operators (no COLLATE support)
+var defaultPatternOperators = map[filter.Operator]string{
+	filter.OpContains:     "LIKE ?",
+	filter.OpContainss:    "LIKE BINARY ?",
+	filter.OpNcontains:   "NOT LIKE ?",
+	filter.OpNcontainss:  "NOT LIKE BINARY ?",
+	filter.OpStartswith:  "LIKE ?",
+	filter.OpStartswiths: "LIKE BINARY ?",
+	filter.OpNstartswith: "NOT LIKE ?",
+	filter.OpNstartswiths:"NOT LIKE BINARY ?",
+	filter.OpEndswith:    "LIKE ?",
+	filter.OpEndswiths:   "LIKE BINARY ?",
+	filter.OpNendswith:   "NOT LIKE ?",
+	filter.OpNendswiths:  "NOT LIKE BINARY ?",
+}
+
+// SQLite-specific pattern matching overrides
+var sqlitePatternOverrides = map[filter.Operator]string{
 	filter.OpContains:     "LIKE ? COLLATE NOCASE",
 	filter.OpContainss:    "LIKE ? COLLATE BINARY",
 	filter.OpNcontains:    "NOT LIKE ? COLLATE NOCASE",
@@ -37,13 +64,27 @@ var operatorMap = map[filter.Operator]string{
 	filter.OpEndswiths:    "LIKE ? COLLATE BINARY",
 	filter.OpNendswith:    "NOT LIKE ? COLLATE NOCASE",
 	filter.OpNendswiths:   "NOT LIKE ? COLLATE BINARY",
-	filter.OpNull:         sqlIsNull,
-	filter.OpNnull:        sqlIsNotNull,
-	filter.OpIn:           sqlIn,
-	filter.OpNin:          sqlNotIn,
-	filter.OpNbetween:     sqlNotBetween,
-	filter.OpBetween:      sqlBetween,
 }
+
+// MySQL-specific pattern matching overrides
+var mysqlPatternOverrides = map[filter.Operator]string{
+	filter.OpContains:     "LIKE ? COLLATE utf8mb4_0900_ai_ci",
+	filter.OpContainss:    "LIKE BINARY ?",
+	filter.OpNcontains:    "NOT LIKE ? COLLATE utf8mb4_0900_ai_ci",
+	filter.OpNcontainss:   "NOT LIKE BINARY ?",
+	filter.OpStartswith:   "LIKE ? COLLATE utf8mb4_0900_ai_ci",
+	filter.OpStartswiths:  "LIKE BINARY ?",
+	filter.OpNstartswith:  "NOT LIKE ? COLLATE utf8mb4_0900_ai_ci",
+	filter.OpNstartswiths: "NOT LIKE BINARY ?",
+	filter.OpEndswith:     "LIKE ? COLLATE utf8mb4_0900_ai_ci",
+	filter.OpEndswiths:    "LIKE BINARY ?",
+	filter.OpNendswith:    "NOT LIKE ? COLLATE utf8mb4_0900_ai_ci",
+	filter.OpNendswiths:   "NOT LIKE BINARY ?",
+}
+
+// getOperatorMap returns the appropriate operator-to-SQL mapping for the current database dialect.
+// Different databases require different syntax for case-insensitive and case-sensitive string operations.
+// The function uses a base/default map and dialect-specific overrides to minimize duplication.
 
 type GORMBuilder struct {
 	baseTx       *gorm.DB // The original DB connection/transaction
@@ -186,7 +227,9 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 			return nil, nil
 		}
 
+		dialectName := b.baseTx.Dialector.Name()
 		searchTerm := formatValue(filter.OpContains, f.Value())
+		operatorMap := getOperatorMap(dialectName)
 		sqlQueryTemplate := operatorMap[filter.OpContains]
 
 		var clauses []filter.Clause
@@ -203,7 +246,8 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 	}
 
 	// For all other logical filters, build a single SQL clause
-	condition, params, err := buildCondition(f.Field(), f.Operator(), f.Value())
+	dialectName := b.baseTx.Dialector.Name()
+	condition, params, err := buildCondition(f.Field(), f.Operator(), f.Value(), dialectName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build condition for field '%s' operator '%s': %w", f.Field(), f.Operator(), err)
 	}
@@ -224,7 +268,8 @@ func (b *GORMBuilder) VisitConditional(f *filter.ConditionalFilter) (filter.Clau
 
 // buildCondition determines the SQL query fragment and its parameters for a given field, operator, and value.
 // It returns the query string, a slice of parameters ([]any), and an error.
-func buildCondition(field string, op filter.Operator, value any) (string, []any, error) {
+func buildCondition(field string, op filter.Operator, value any, dialectName string) (string, []any, error) {
+	operatorMap := getOperatorMap(dialectName)
 	sqlQuery, ok := operatorMap[op]
 	if !ok {
 		return "", nil, fmt.Errorf("unsupported operator: %s", op)
@@ -280,6 +325,39 @@ func formatValue(op filter.Operator, value any) any {
 
 	// For all other operators (Eq, Ne, Lt, Gt, Lte, Gte, In, Nin), return the value as is.
 	return value
+}
+
+// getOperatorMap returns the appropriate operator-to-SQL mapping for the current database dialect.
+// Different databases require different syntax for case-insensitive and case-sensitive string operations.
+// The function uses package-level maps with dialect-specific overrides to minimize duplication.
+func getOperatorMap(dialectName string) map[filter.Operator]string {
+	// Create result map and copy base operators
+	result := make(map[filter.Operator]string, len(baseOperators)+len(defaultPatternOperators))
+	for k, v := range baseOperators {
+		result[k] = v
+	}
+	for k, v := range defaultPatternOperators {
+		result[k] = v
+	}
+
+	// Apply dialect-specific overrides
+	var overrides map[filter.Operator]string
+	switch dialectName {
+	case "sqlite":
+		overrides = sqlitePatternOverrides
+	case "mysql", "mariadb":
+		overrides = mysqlPatternOverrides
+	default:
+		// Keep the default pattern matching operators as-is
+		return result
+	}
+
+	// Merge overrides
+	for k, v := range overrides {
+		result[k] = v
+	}
+
+	return result
 }
 
 // isJSONPath checks if a field name represents a JSON path (contains dot notation)
