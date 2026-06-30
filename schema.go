@@ -105,6 +105,35 @@ func (sw *SchemaWrapper) FilterOperators() map[string][]string {
 	return operators
 }
 
+// FieldEnums returns enum values per field from jsonschema reflection.
+// Fields with jsonschema:"enum=a,enum=b" struct tags will have their
+// enum values populated in prop.Enum by the jsonschema reflector.
+func (sw *SchemaWrapper) FieldEnums() map[string][]string {
+	enums := make(map[string][]string)
+
+	for pair := sw.schema.Properties.Oldest(); pair != nil; pair = pair.Next() {
+		fieldName := pair.Key
+		prop := pair.Value
+
+		if len(prop.Enum) == 0 {
+			continue
+		}
+
+		values := make([]string, 0, len(prop.Enum))
+		for _, v := range prop.Enum {
+			if s, ok := v.(string); ok {
+				values = append(values, s)
+			}
+		}
+
+		if len(values) > 0 {
+			enums[fieldName] = values
+		}
+	}
+
+	return enums
+}
+
 // Helper functions
 
 func isSortableType(prop *jsonschema.Schema) bool {

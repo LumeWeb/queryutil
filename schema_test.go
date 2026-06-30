@@ -54,6 +54,12 @@ type TestDTO struct {
 	HiddenField string `json:"-" sort:"true"`
 }
 
+type EnumDTO struct {
+	Status string `json:"status" filter:"true" jsonschema:"enum=pending,enum=processing,enum=completed,enum=failed"`
+	Level  string `json:"level" filter:"true" jsonschema:"enum=info,enum=warn,enum=error"`
+	Name   string `json:"name" filter:"true"`
+}
+
 func TestNewSchemaProvider(t *testing.T) {
 	provider := NewSchemaProvider()
 	assert.NotNil(t, provider)
@@ -177,4 +183,33 @@ func TestEdgeCases(t *testing.T) {
 		schema := provider.ForType("string")
 		assert.NotNil(t, schema)
 	})
+}
+
+func TestFieldEnums(t *testing.T) {
+	provider := NewSchemaProvider()
+	schema := provider.ForType(EnumDTO{})
+
+	enums := schema.FieldEnums()
+	assert.NotEmpty(t, enums)
+
+	// Status field should have enum values
+	assert.ElementsMatch(t,
+		[]string{"pending", "processing", "completed", "failed"},
+		enums["status"])
+
+	// Level field should have enum values
+	assert.ElementsMatch(t,
+		[]string{"info", "warn", "error"},
+		enums["level"])
+
+	// Name field has no enum
+	assert.NotContains(t, enums, "name")
+}
+
+func TestFieldEnums_NoEnums(t *testing.T) {
+	provider := NewSchemaProvider()
+	schema := provider.ForType(TestDTO{})
+
+	enums := schema.FieldEnums()
+	assert.Empty(t, enums)
 }
