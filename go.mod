@@ -6,7 +6,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/samber/lo v1.52.0
 	github.com/stretchr/testify v1.11.1
-	go.lumeweb.com/portal-router v0.6.17
+	go.lumeweb.com/portal-router v0.7.2
 	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/sqlite v1.6.0
