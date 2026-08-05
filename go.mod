@@ -2,6 +2,12 @@ module go.lumeweb.com/queryutil
 
 go 1.24.13
 
+// v0.3.17 was re-cut at a divergent commit after publication, so its module
+// content no longer matches the immutable checksum recorded in the Go
+// checksum database (sum.golang.org). Consumers pinned to v0.3.17 get a
+// checksum mismatch. Use v0.3.18 or later.
+retract v0.3.17
+
 require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/samber/lo v1.52.0
