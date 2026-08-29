@@ -38,6 +38,10 @@ func openTestDB(t *testing.T, sqliteName string) *gorm.DB {
 	return db
 }
 
+func isMySQLTest(db *gorm.DB) bool {
+	return db.Dialector.Name() == "mysql"
+}
+
 func TestGORMBuilder_ApplyFilters(t *testing.T) {
 	type User struct {
 		ID       uint
@@ -98,6 +102,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 		filters      []filter.CrudFilter // Now defined using constructors
 		searchConfig *filter.GlobalSearchConfig
 		wantCount    int64
+		wantCountMySQL int64 // Overrides wantCount when running on MySQL; -1 means same as wantCount
 		wantErr      bool // Explicitly indicate whether an error is expected
 		// Optional: Add a function to verify specific results if needed beyond count
 		verify func(*testing.T, []User)
@@ -193,12 +198,11 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 				filter.NewLogicalFilter("metadata.preferences.theme", filter.OpNcontainss, "Dark"),
 			},
 			searchConfig: nil,
-			wantCount:    1, // Only Jane Smith (light theme) - case sensitive so "dark" != "Dark"
-			verify: func(t *testing.T, users []User) {
-				if assert.Len(t, users, 1) {
-					assert.Equal(t, "Jane Smith", users[0].Name)
-				}
-			},
+			// Case-sensitive: "dark" does not contain "Dark", so all three
+			// users match "NOT contains Dark". On SQLite GLOB is used for
+			// case-sensitive matching (LIKE ignores COLLATE BINARY), on MySQL
+			// LIKE BINARY is natively case-sensitive — both return 3.
+			wantCount: 3,
 		},
 		{
 			name: "global search across multiple columns",
@@ -449,7 +453,7 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 				filter.NewLogicalFilter("metadata.nullable_field", filter.OpNull, nil),
 			},
 			searchConfig: nil,
-			wantCount:    0, // Assuming no users have explicit null in their JSON
+			wantCount:    3, // OpNull matches a missing JSON path (treats it as NULL), consistent with "json null filter"
 			wantErr:      false,
 		},
 		{
@@ -677,7 +681,11 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			assert.NoError(t, result.Error, "Database query failed")
 
 			// Verify the count
-			assert.Equal(t, tt.wantCount, int64(result.RowsAffected), "Result count mismatch")
+			wantCount := tt.wantCount
+			if isMySQLTest(db) && tt.wantCountMySQL != 0 {
+				wantCount = tt.wantCountMySQL
+			}
+			assert.Equal(t, wantCount, int64(result.RowsAffected), "Result count mismatch")
 
 			// Use the verification function if provided
 			if tt.verify != nil {
@@ -846,4 +854,68 @@ func TestGORMBuilder_ApplyConcurrent(t *testing.T) {
 	for i, e := range errs {
 		require.NoError(t, e, "worker %d", i)
 	}
+}
+
+func TestQuoteJSONPath(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"preferences.theme", "preferences.theme"},
+		{"user-info", `"user-info"`},
+		{"123", `"123"`},
+		{"a.b-c.d", `a."b-c".d`},
+		{"ok_1.ok2", "ok_1.ok2"},
+		{"a-b.c-d", `"a-b"."c-d"`},
+	}
+	for _, tc := range cases {
+		if got := quotePath(tc.in); got != tc.want {
+			t.Errorf("quotePath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+
+	if got := jsonPathExpr("user-info"); got != `$."user-info"` {
+		t.Errorf("jsonPathExpr = %q, want %q", got, `$."user-info"`)
+	}
+}
+
+func TestCaseSensitiveJSONFilterUsesBinaryMatching(t *testing.T) {
+	db := openTestDB(t, "file::memory:?cache=shared")
+	t.Cleanup(func() {
+		sqlDB, _ := db.DB()
+		_ = sqlDB.Close()
+	})
+
+	type CSUser struct {
+		ID   uint
+		Name string
+		Meta datatypes.JSON
+	}
+	require.NoError(t, db.AutoMigrate(&CSUser{}))
+	require.NoError(t, db.Create(&CSUser{Name: "A", Meta: datatypes.JSON([]byte(`{"code":"dark"}`))}).Error)
+	require.NoError(t, db.Create(&CSUser{Name: "B", Meta: datatypes.JSON([]byte(`{"code":"Dark"}`))}).Error)
+	require.NoError(t, db.Create(&CSUser{Name: "C", Meta: datatypes.JSON([]byte(`{"code":"LIGHT"}`))}).Error)
+
+	// OpContainss "Dark" — case-sensitive: only B matches (exact "Dark")
+	b := NewGORMBuilder(db, nil)
+	q, err := b.Apply(db.Model(&CSUser{}), []filter.CrudFilter{
+		filter.NewLogicalFilter("meta.code", filter.OpContainss, "Dark"),
+	})
+	require.NoError(t, err)
+	var got []CSUser
+	require.NoError(t, q.Find(&got).Error)
+	if isMySQLTest(db) {
+		assert.Len(t, got, 1)
+		assert.Equal(t, "B", got[0].Name)
+	} else {
+		// SQLite GLOB is case-sensitive
+		assert.Len(t, got, 1)
+		assert.Equal(t, "B", got[0].Name)
+	}
+
+	// OpContains "Dark" — case-insensitive: A and B match ("dark" and "Dark")
+	q2, err := b.Apply(db.Model(&CSUser{}), []filter.CrudFilter{
+		filter.NewLogicalFilter("meta.code", filter.OpContains, "Dark"),
+	})
+	require.NoError(t, err)
+	var got2 []CSUser
+	require.NoError(t, q2.Find(&got2).Error)
+	assert.Len(t, got2, 2, "case-insensitive contains should match both 'dark' and 'Dark'")
 }
