@@ -417,11 +417,14 @@ func extractKnownTables(query *gorm.DB) map[string]struct{} {
 
 	stmt := query.Statement
 	// For Model-based queries GORM defers Statement.Table resolution until SQL
-	// build time, leaving it empty here. Materialize it so the model's table is
-	// recognized as a known identifier. A failed parse leaves Table empty and
-	// falls back to legacy behavior.
+	// build time, leaving it empty here. Resolve the model's table without
+	// mutating the caller's statement by parsing into a throwaway statement; a
+	// failed parse leaves the table empty and falls back to legacy behavior.
 	if stmt.Table == "" && stmt.Model != nil {
-		_ = stmt.Parse(stmt.Model)
+		tmp := gorm.Statement{DB: stmt.DB, Model: stmt.Model}
+		if err := tmp.Parse(stmt.Model); err == nil {
+			add(tmp.Table)
+		}
 	}
 	add(stmt.Table)
 	for _, join := range stmt.Joins {
