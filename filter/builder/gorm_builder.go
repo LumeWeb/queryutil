@@ -89,6 +89,12 @@ var mysqlPatternOverrides = map[filter.Operator]string{
 type GORMBuilder struct {
 	baseTx       *gorm.DB // The original DB connection/transaction
 	searchConfig *filter.GlobalSearchConfig
+
+	// knownTables holds the table/alias names present in the query's FROM and JOINs
+	// (lowercased), used to disambiguate qualified columns from JSON paths in dotted
+	// field names. It is per-query state carried on a per-Apply copy of the builder so
+	// the shared receiver handed to NewGORMBuilder stays immutable and race-free.
+	knownTables map[string]struct{}
 }
 
 func NewGORMBuilder(baseTx *gorm.DB, searchConfig *filter.GlobalSearchConfig) *GORMBuilder {
@@ -106,6 +112,18 @@ func (b *GORMBuilder) ApplySorts(query *gorm.DB, sorts []filter.Sort) *gorm.DB {
 }
 
 func (b *GORMBuilder) Apply(query *gorm.DB, filters []filter.CrudFilter) (*gorm.DB, error) {
+	// Capture the tables/aliases present in the target query so that dotted fields
+	// can be disambiguated between qualified columns and JSON paths. The table set
+	// is per-query state, so it lives on a per-call copy of the builder: the shared
+	// receiver must not be mutated (concurrent Apply on one builder stays race-free).
+	work := *b
+	work.knownTables = extractKnownTables(query)
+	return work.apply(query, filters)
+}
+
+// apply runs the visitor pipeline for a single Apply call against the receiver's
+// per-call knownTables snapshot.
+func (b *GORMBuilder) apply(query *gorm.DB, filters []filter.CrudFilter) (*gorm.DB, error) {
 	for _, f := range filters {
 		// 1. Convert CrudFilter to Clause using the Visitor pattern
 		clause, err := f.AcceptVisitor(b) // Calls b.VisitLogical or b.VisitConditional
@@ -240,8 +258,9 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 		return NewCompoundClause(filter.LogicalOr, clauses), nil
 	}
 
-	// Check if this is a JSON path field (contains dot notation)
-	if isJSONPath(f.Field()) {
+	// Check if this is a JSON path field (contains dot notation and the leading
+	// identifier does not name a table/alias present in the query).
+	if b.isJSONPath(f.Field()) {
 		return b.buildJSONClause(f)
 	}
 
@@ -360,9 +379,118 @@ func getOperatorMap(dialectName string) map[filter.Operator]string {
 	return result
 }
 
-// isJSONPath checks if a field name represents a JSON path (contains dot notation)
-func isJSONPath(field string) bool {
-	return strings.Contains(field, ".")
+// isJSONPath reports whether a dotted field should be treated as a JSON path.
+// A dotted field is a JSON path unless its leading identifier names a table or
+// alias present in the query's FROM/JOINs, in which case it is a qualified column.
+func (b *GORMBuilder) isJSONPath(field string) bool {
+	if !strings.Contains(field, ".") {
+		return false
+	}
+	leading := field[:strings.Index(field, ".")]
+	return !b.isKnownTable(leading)
+}
+
+// isKnownTable reports whether name matches one of the tables/aliases known to
+// the current query. Matching is case-insensitive per SQL identifier semantics.
+func (b *GORMBuilder) isKnownTable(name string) bool {
+	if len(b.knownTables) == 0 {
+		return false
+	}
+	_, ok := b.knownTables[strings.ToLower(cleanIdentifier(name))]
+	return ok
+}
+
+// extractKnownTables collects the table and alias names present in the query's
+// FROM clause and JOINs. It returns nil when none can be determined, in which
+// case dotted fields retain the legacy JSON-path behavior.
+func extractKnownTables(query *gorm.DB) map[string]struct{} {
+	if query == nil || query.Statement == nil {
+		return nil
+	}
+
+	tables := make(map[string]struct{})
+	add := func(id string) {
+		if id = strings.ToLower(cleanIdentifier(id)); id != "" {
+			tables[id] = struct{}{}
+		}
+	}
+
+	stmt := query.Statement
+	// For Model-based queries GORM defers Statement.Table resolution until SQL
+	// build time, leaving it empty here. Resolve the model's table without
+	// mutating the caller's statement by parsing into a throwaway statement; a
+	// failed parse leaves the table empty and falls back to legacy behavior.
+	if stmt.Table == "" && stmt.Model != nil {
+		tmp := gorm.Statement{DB: stmt.DB, Model: stmt.Model}
+		if err := tmp.Parse(stmt.Model); err == nil {
+			add(tmp.Table)
+		}
+	}
+	add(stmt.Table)
+	for _, join := range stmt.Joins {
+		table, alias := parseJoinName(join.Name)
+		add(table)
+		add(alias)
+	}
+
+	if len(tables) == 0 {
+		return nil
+	}
+	return tables
+}
+
+// cleanIdentifier removes surrounding quotes and strips any schema qualifier,
+// leaving the bare table/alias name.
+func cleanIdentifier(id string) string {
+	id = strings.Trim(strings.TrimSpace(id), "\"`'")
+	if i := strings.LastIndex(id, "."); i >= 0 {
+		id = id[i+1:]
+	}
+	return id
+}
+
+// joinKeyword is the set of words that may precede the joined table identifier
+// in a JOIN clause string.
+var joinKeywords = map[string]struct{}{
+	"join": {}, "left": {}, "right": {}, "inner": {}, "outer": {},
+	"full": {}, "cross": {}, "natural": {},
+}
+
+// parseJoinName extracts the table and optional alias from a raw JOIN clause
+// string such as "LEFT JOIN directories ON ..." or "JOIN files AS f ON ...".
+func parseJoinName(name string) (table, alias string) {
+	fields := strings.Fields(name)
+	i := 0
+	// Skip leading JOIN-type keywords (LEFT, JOIN, OUTER, ...).
+	for i < len(fields) {
+		if _, ok := joinKeywords[strings.ToLower(fields[i])]; ok {
+			i++
+			continue
+		}
+		break
+	}
+	if i >= len(fields) {
+		return "", ""
+	}
+
+	table = fields[i]
+	i++
+	if i >= len(fields) {
+		return table, ""
+	}
+	// Joins may declare an alias as "<name> <alias>" or "<name> AS <alias>".
+	if strings.EqualFold(fields[i], "AS") {
+		i++
+	}
+	if i < len(fields) {
+		switch strings.ToLower(fields[i]) {
+		case "on", "using", "join":
+			return table, ""
+		default:
+			return table, fields[i]
+		}
+	}
+	return table, ""
 }
 
 // parseJSONPath splits a JSON path field into column name and path components
