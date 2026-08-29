@@ -14,8 +14,7 @@ func ApplyFilters(tx *gorm.DB, filters []CrudFilter, searchConfig *GlobalSearchC
 
 // ApplySort applies sort parameters to a GORM query
 func ApplySort(tx *gorm.DB, sorts []Sort) *gorm.DB {
-	b := builder.NewGORMBuilder(tx, nil)
-	return b.ApplySorts(tx, sorts)
+	return builder.ApplySorts(tx, sorts)
 }
 
 // ApplyPagination applies pagination parameters to a GORM query

@@ -1,8 +1,12 @@
 package builder
 
 import (
+	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/datatypes"
@@ -16,6 +20,11 @@ const (
 	sqlIn         = "IN (?)"
 	sqlNotIn      = "NOT IN (?)"
 	sqlBetween    = "BETWEEN ? AND ?"
+
+	dialectSQLite  = "sqlite"
+	dialectMySQL   = "mysql"
+	dialectMySQL5  = "mysql5" // MySQL 5.x lacks utf8mb4_0900_ai_ci
+	dialectMariaDB = "mariadb"
 )
 
 // Base operators that are common across all databases
@@ -34,61 +43,156 @@ var baseOperators = map[filter.Operator]string{
 	filter.OpBetween:  sqlBetween,
 }
 
-// Default pattern matching operators (no COLLATE support)
-var defaultPatternOperators = map[filter.Operator]string{
-	filter.OpContains:     "LIKE ?",
-	filter.OpContainss:    "LIKE BINARY ?",
-	filter.OpNcontains:   "NOT LIKE ?",
-	filter.OpNcontainss:  "NOT LIKE BINARY ?",
-	filter.OpStartswith:  "LIKE ?",
-	filter.OpStartswiths: "LIKE BINARY ?",
-	filter.OpNstartswith: "NOT LIKE ?",
-	filter.OpNstartswiths:"NOT LIKE BINARY ?",
-	filter.OpEndswith:    "LIKE ?",
-	filter.OpEndswiths:   "LIKE BINARY ?",
-	filter.OpNendswith:   "NOT LIKE ?",
-	filter.OpNendswiths:  "NOT LIKE BINARY ?",
+// dialectPattern captures the four LIKE forms a dialect uses for pattern
+// matching: case-insensitive (ci) and case-sensitive (cs), each in a positive
+// and negated variant. Case-insensitive forms carry the dialect's collation;
+// case-sensitive forms are binary. SQLite's LIKE ignores COLLATE for case
+// sensitivity, so its case-sensitive forms use GLOB, which is always binary.
+// Because GLOB uses different wildcards (* and ? instead of % and _),
+// csTranslate must be true for the SQLite pattern to activate wildcard
+// translation on the bound value.
+type dialectPattern struct {
+	ciLike, ciNotLike string
+	csLike, csNotLike string
+	csTranslate       bool // true when cs forms use GLOB wildcards (* ?) not LIKE (% _)
 }
 
-// SQLite-specific pattern matching overrides
-var sqlitePatternOverrides = map[filter.Operator]string{
-	filter.OpContains:     "LIKE ? COLLATE NOCASE",
-	filter.OpContainss:    "LIKE ? COLLATE BINARY",
-	filter.OpNcontains:    "NOT LIKE ? COLLATE NOCASE",
-	filter.OpNcontainss:   "NOT LIKE ? COLLATE BINARY",
-	filter.OpStartswith:   "LIKE ? COLLATE NOCASE",
-	filter.OpStartswiths:  "LIKE ? COLLATE BINARY",
-	filter.OpNstartswith:  "NOT LIKE ? COLLATE NOCASE",
-	filter.OpNstartswiths: "NOT LIKE ? COLLATE BINARY",
-	filter.OpEndswith:     "LIKE ? COLLATE NOCASE",
-	filter.OpEndswiths:    "LIKE ? COLLATE BINARY",
-	filter.OpNendswith:    "NOT LIKE ? COLLATE NOCASE",
-	filter.OpNendswiths:   "NOT LIKE ? COLLATE BINARY",
+// dialectPatterns holds the pattern operator forms per dialect. The empty-string
+// key is the fallback for unknown dialects (plain LIKE, no collation support).
+var dialectPatterns = map[string]dialectPattern{
+	"": {
+		ciLike: "LIKE ?", ciNotLike: "NOT LIKE ?",
+		csLike: "LIKE BINARY ?", csNotLike: "NOT LIKE BINARY ?",
+	},
+	dialectSQLite: {
+		ciLike: "LIKE ? COLLATE NOCASE", ciNotLike: "NOT LIKE ? COLLATE NOCASE",
+		csLike: "GLOB ?", csNotLike: "NOT GLOB ?",
+		csTranslate: true,
+	},
+	dialectMySQL: {
+		// utf8mb4_0900_ai_ci is a MySQL 8.0+ collation.
+		ciLike: "LIKE ? COLLATE utf8mb4_0900_ai_ci", ciNotLike: "NOT LIKE ? COLLATE utf8mb4_0900_ai_ci",
+		csLike: "LIKE BINARY ?", csNotLike: "NOT LIKE BINARY ?",
+	},
+	dialectMySQL5: {
+		// MySQL 5.x does not support utf8mb4_0900_ai_ci; use general_ci.
+		ciLike: "LIKE ? COLLATE utf8mb4_general_ci", ciNotLike: "NOT LIKE ? COLLATE utf8mb4_general_ci",
+		csLike: "LIKE BINARY ?", csNotLike: "NOT LIKE BINARY ?",
+	},
+	dialectMariaDB: {
+		// MariaDB does not support utf8mb4_0900_ai_ci; use a portable unicode collation.
+		ciLike: "LIKE ? COLLATE utf8mb4_unicode_ci", ciNotLike: "NOT LIKE ? COLLATE utf8mb4_unicode_ci",
+		csLike: "LIKE BINARY ?", csNotLike: "NOT LIKE BINARY ?",
+	},
 }
 
-// MySQL-specific pattern matching overrides
-var mysqlPatternOverrides = map[filter.Operator]string{
-	filter.OpContains:     "LIKE ? COLLATE utf8mb4_0900_ai_ci",
-	filter.OpContainss:    "LIKE BINARY ?",
-	filter.OpNcontains:    "NOT LIKE ? COLLATE utf8mb4_0900_ai_ci",
-	filter.OpNcontainss:   "NOT LIKE BINARY ?",
-	filter.OpStartswith:   "LIKE ? COLLATE utf8mb4_0900_ai_ci",
-	filter.OpStartswiths:  "LIKE BINARY ?",
-	filter.OpNstartswith:  "NOT LIKE ? COLLATE utf8mb4_0900_ai_ci",
-	filter.OpNstartswiths: "NOT LIKE BINARY ?",
-	filter.OpEndswith:     "LIKE ? COLLATE utf8mb4_0900_ai_ci",
-	filter.OpEndswiths:    "LIKE BINARY ?",
-	filter.OpNendswith:    "NOT LIKE ? COLLATE utf8mb4_0900_ai_ci",
-	filter.OpNendswiths:   "NOT LIKE BINARY ?",
+// patternOpDef describes one LIKE/NOT LIKE pattern operator together with
+// whether it matches case-sensitively and whether it is negated. Its SQL form is
+// resolved per dialect; its bound value pattern is handled by formatValue.
+type patternOpDef struct {
+	op        filter.Operator
+	sensitive bool
+	negative  bool
 }
 
-// getOperatorMap returns the appropriate operator-to-SQL mapping for the current database dialect.
-// Different databases require different syntax for case-insensitive and case-sensitive string operations.
-// The function uses a base/default map and dialect-specific overrides to minimize duplication.
+// patternOpDefs is the single source of truth for the pattern operator set; it
+// drives both the per-dialect operator map and its size, so the count is never
+// hardcoded.
+var patternOpDefs = []patternOpDef{
+	{filter.OpContains, false, false}, {filter.OpContainss, true, false},
+	{filter.OpNcontains, false, true}, {filter.OpNcontainss, true, true},
+	{filter.OpStartswith, false, false}, {filter.OpStartswiths, true, false},
+	{filter.OpNstartswith, false, true}, {filter.OpNstartswiths, true, true},
+	{filter.OpEndswith, false, false}, {filter.OpEndswiths, true, false},
+	{filter.OpNendswith, false, true}, {filter.OpNendswiths, true, true},
+}
+
+// buildPatternOperators expands a dialect's four LIKE forms into the full set of
+// pattern operators defined by patternOpDefs.
+func buildPatternOperators(p dialectPattern) map[filter.Operator]string {
+	m := make(map[filter.Operator]string, len(patternOpDefs))
+	for _, def := range patternOpDefs {
+		form := p.ciLike
+		switch {
+		case def.sensitive && !def.negative:
+			form = p.csLike
+		case !def.sensitive && def.negative:
+			form = p.ciNotLike
+		case def.sensitive && def.negative:
+			form = p.csNotLike
+		}
+		m[def.op] = form
+	}
+	return m
+}
+
+// translateGlob converts a LIKE pattern (% and _ wildcards) to a GLOB pattern
+// (* and ? wildcards). Literal * and ? in the value are escaped using SQLite
+// GLOB's character class syntax ([*] and [?]), since GLOB does not support an
+// ESCAPE clause.
+func translateGlob(pattern string) string {
+	var b strings.Builder
+	for _, r := range pattern {
+		switch r {
+		case '%':
+			b.WriteByte('*')
+		case '_':
+			b.WriteByte('?')
+		case '*':
+			b.WriteString("[*]")
+		case '?':
+			b.WriteString("[?]")
+		case '[':
+			b.WriteString("[[]")
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// operatorMaps is the precomputed, immutable operator mapping per dialect. It
+// combines the dialect-independent base operators with the dialect pattern
+// forms, so lookups do not rebuild a map on every call.
+var operatorMaps = func() map[string]map[filter.Operator]string {
+	maps := make(map[string]map[filter.Operator]string, len(dialectPatterns))
+	for dialect, p := range dialectPatterns {
+		full := make(map[filter.Operator]string, len(baseOperators)+len(patternOpDefs))
+		for k, v := range baseOperators {
+			full[k] = v
+		}
+		for k, v := range buildPatternOperators(p) {
+			full[k] = v
+		}
+		maps[dialect] = full
+	}
+	return maps
+}()
+
+// getOperatorMap returns the operator-to-SQL mapping for the given dialect.
+// Patterns are precomputed once per dialect; unknown dialects fall back to plain
+// LIKE matching.
+func getOperatorMap(dialectName string) map[filter.Operator]string {
+	if m, ok := operatorMaps[dialectName]; ok {
+		return m
+	}
+	return operatorMaps[""]
+}
+
+// dialectCache memoizes dialect detection per root *sql.DB. The key is the
+// physical connection pool, which is stable for the lifetime of a database —
+// even across transactions — so the cache does not grow with connection churn.
+var dialectCache sync.Map // map[*sql.DB]string
 
 type GORMBuilder struct {
 	baseTx       *gorm.DB // The original DB connection/transaction
 	searchConfig *filter.GlobalSearchConfig
+
+	// dialectOnce memoizes the resolved MySQL dialect per builder instance. This
+	// covers transaction pools (*sql.Tx) and prepared-statement wrappers
+	// (gorm.PreparedStmtDB) where the *sql.DB type assertion in dialectName()
+	// fails, ensuring SELECT VERSION() runs at most once per builder lifetime.
+	dialectOnce atomic.Value // string
 
 	// knownTables holds the table/alias names present in the query's FROM and JOINs
 	// (lowercased), used to disambiguate qualified columns from JSON paths in dotted
@@ -98,13 +202,88 @@ type GORMBuilder struct {
 }
 
 func NewGORMBuilder(baseTx *gorm.DB, searchConfig *filter.GlobalSearchConfig) *GORMBuilder {
-	return &GORMBuilder{baseTx: baseTx, searchConfig: searchConfig}
+	return &GORMBuilder{
+		baseTx:       baseTx,
+		searchConfig: searchConfig,
+	}
+}
+
+// dialectName returns the effective database dialect for this builder's
+// underlying connection. Resolution is lazy: the first call for a given MySQL
+// connection pool queries SELECT VERSION() and caches the result on the root
+// *sql.DB, so subsequent builders sharing the same pool pay no round-trip.
+// Non-MySQL dialects return immediately.
+func (b *GORMBuilder) dialectName() string {
+	driver := b.baseTx.Dialector.Name()
+	if driver != dialectMySQL {
+		return driver
+	}
+	if sqlDB, ok := b.baseTx.ConnPool.(*sql.DB); ok {
+		if v, ok := dialectCache.Load(sqlDB); ok {
+			return v.(string)
+		}
+		resolved := detectMySQLFlavor(b.baseTx)
+		actual, _ := dialectCache.LoadOrStore(sqlDB, resolved)
+		return actual.(string)
+	}
+	if v := b.dialectOnce.Load(); v != nil {
+		return v.(string)
+	}
+	resolved := detectMySQLFlavor(b.baseTx)
+	b.dialectOnce.Store(resolved)
+	return resolved
+}
+
+// detectMySQLFlavor runs SELECT VERSION() and maps the banner to the effective
+// dialect. If the query fails, it falls back to dialectMySQL5, whose
+// utf8mb4_general_ci collation is portable across MySQL 5.x, 8.x, and MariaDB,
+// rather than risking an unknown-collation error from the 8.0-only
+// utf8mb4_0900_ai_ci.
+func detectMySQLFlavor(db *gorm.DB) string {
+	var version string
+	if err := db.Raw("SELECT VERSION()").Scan(&version).Error; err == nil {
+		return mysqlFlavor(version)
+	}
+	return dialectMySQL5
+}
+
+// mysqlFlavor maps a MySQL-family server version banner to the effective
+// dialect. MariaDB must be distinguished because it lacks MySQL 8.0 collations.
+// MySQL 5.x is distinguished because it lacks utf8mb4_0900_ai_ci.
+func mysqlFlavor(version string) string {
+	lower := strings.ToLower(version)
+	if strings.Contains(lower, dialectMariaDB) {
+		return dialectMariaDB
+	}
+	// Extract the leading numeric major version from the banner.
+	if major := mysqlMajorVersion(version); major > 0 && major < 6 {
+		return dialectMySQL5
+	}
+	return dialectMySQL
+}
+
+// mysqlMajorVersion parses the major version number from a MySQL VERSION()
+// banner. Returns 0 if it cannot be determined.
+func mysqlMajorVersion(version string) int {
+	// The banner starts with digits, optionally followed by more dots/numbers.
+	i := 0
+	for i < len(version) && version[i] >= '0' && version[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(version[:i])
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // ApplySorts applies sorting parameters to a GORM query.
 // It takes a slice of Sort structs and adds ORDER BY clauses to the query.
 // Example: []Sort{{Field: "name", Order: "asc"}} becomes "name asc"
-func (b *GORMBuilder) ApplySorts(query *gorm.DB, sorts []filter.Sort) *gorm.DB {
+func ApplySorts(query *gorm.DB, sorts []filter.Sort) *gorm.DB {
 	for _, sort := range sorts {
 		query = query.Order(fmt.Sprintf("%s %s", sort.Field, sort.Order))
 	}
@@ -245,7 +424,7 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 			return nil, nil
 		}
 
-		dialectName := b.baseTx.Dialector.Name()
+		dialectName := b.dialectName()
 		searchTerm := formatValue(filter.OpContains, f.Value())
 		operatorMap := getOperatorMap(dialectName)
 		sqlQueryTemplate := operatorMap[filter.OpContains]
@@ -265,7 +444,7 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 	}
 
 	// For all other logical filters, build a single SQL clause
-	dialectName := b.baseTx.Dialector.Name()
+	dialectName := b.dialectName()
 	condition, params, err := buildCondition(f.Field(), f.Operator(), f.Value(), dialectName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build condition for field '%s' operator '%s': %w", f.Field(), f.Operator(), err)
@@ -300,6 +479,18 @@ func buildCondition(field string, op filter.Operator, value any, dialectName str
 	}
 
 	formattedVal := formatValue(op, value)
+
+	// SQLite case-sensitive operators use GLOB, which has different wildcards.
+	if dialectName == dialectSQLite {
+		switch op {
+		case filter.OpContainss, filter.OpNcontainss,
+			filter.OpStartswiths, filter.OpNstartswiths,
+			filter.OpEndswiths, filter.OpNendswiths:
+			if s, ok := formattedVal.(string); ok {
+				formattedVal = translateGlob(s)
+			}
+		}
+	}
 
 	// Special handling for BETWEEN as it expects exactly two parameters
 	if op == filter.OpBetween {
@@ -344,39 +535,6 @@ func formatValue(op filter.Operator, value any) any {
 
 	// For all other operators (Eq, Ne, Lt, Gt, Lte, Gte, In, Nin), return the value as is.
 	return value
-}
-
-// getOperatorMap returns the appropriate operator-to-SQL mapping for the current database dialect.
-// Different databases require different syntax for case-insensitive and case-sensitive string operations.
-// The function uses package-level maps with dialect-specific overrides to minimize duplication.
-func getOperatorMap(dialectName string) map[filter.Operator]string {
-	// Create result map and copy base operators
-	result := make(map[filter.Operator]string, len(baseOperators)+len(defaultPatternOperators))
-	for k, v := range baseOperators {
-		result[k] = v
-	}
-	for k, v := range defaultPatternOperators {
-		result[k] = v
-	}
-
-	// Apply dialect-specific overrides
-	var overrides map[filter.Operator]string
-	switch dialectName {
-	case "sqlite":
-		overrides = sqlitePatternOverrides
-	case "mysql", "mariadb":
-		overrides = mysqlPatternOverrides
-	default:
-		// Keep the default pattern matching operators as-is
-		return result
-	}
-
-	// Merge overrides
-	for k, v := range overrides {
-		result[k] = v
-	}
-
-	return result
 }
 
 // isJSONPath reports whether a dotted field should be treated as a JSON path.
@@ -499,19 +657,71 @@ func parseJSONPath(field string) (jsonColumn, jsonPath string) {
 	return parts[0], parts[1]
 }
 
+// isValidJSONKey reports whether a key is a plain JSON path identifier that needs
+// no quoting (letters, digits and underscore, not starting with a digit).
+func isValidJSONKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i, r := range key {
+		identifier := r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(i > 0 && r >= '0' && r <= '9')
+		if !identifier {
+			return false
+		}
+	}
+	return true
+}
+
+// quotePath returns a dot-joined JSON path with any non-identifier segment
+// double-quoted. MySQL rejects paths such as "$.user-info" or "$.123" with an
+// invalid-path error; quoting the segment produces a path both MySQL and SQLite
+// accept.
+func quotePath(jsonPath string) string {
+	segments := strings.Split(jsonPath, ".")
+	for i, seg := range segments {
+		if !isValidJSONKey(seg) {
+			segments[i] = "\"" + strings.ReplaceAll(seg, "\"", "\\\"") + "\""
+		}
+	}
+	return strings.Join(segments, ".")
+}
+
+// jsonPathExpr returns a full "$.path" JSON path expression, quoting any segment
+// that is not a plain identifier.
+func jsonPathExpr(jsonPath string) string {
+	return "$." + quotePath(jsonPath)
+}
+
 // buildJSONQuery creates a JSON query expression for the given operator and parameters
 func (b *GORMBuilder) buildJSONQuery(operator, jsonColumn, jsonPath string, value any) (string, []any) {
-	// For SQLite, use json_extract()
-	// For MySQL, use JSON_EXTRACT()
-	extractFunc := "JSON_EXTRACT"
-	if b.baseTx.Dialector.Name() == "sqlite" {
-		extractFunc = "json_extract"
+	extractFunc := "json_extract"
+	switch b.dialectName() {
+	case dialectMySQL, dialectMySQL5, dialectMariaDB:
+		extractFunc = "JSON_EXTRACT"
 	}
 
 	query := fmt.Sprintf("%s(%s, ?) %s ?", extractFunc, jsonColumn, operator)
-	params := []any{"$." + jsonPath, value}
+	params := []any{jsonPathExpr(jsonPath), value}
 
 	return query, params
+}
+
+// jsonExtractExpr returns a dialect-appropriate SQL expression that extracts
+// the value at a JSON path (bound via "?") from a JSON column as unquoted
+// text. MySQL's JSON_EXTRACT preserves the surrounding quotes of string
+// values, which would otherwise break pattern matching (e.g. LIKE 'dar%'
+// against `"dark"`), so it is wrapped in JSON_UNQUOTE to match SQLite's
+// json_extract behavior. Unknown dialects fall back to the SQLite form since
+// json_extract is the most widely implemented JSON function across embedded
+// databases.
+func (b *GORMBuilder) jsonExtractExpr(jsonColumn string) string {
+	switch b.dialectName() {
+	case dialectMySQL, dialectMySQL5, dialectMariaDB:
+		return fmt.Sprintf("JSON_UNQUOTE(JSON_EXTRACT(%s, ?))", jsonColumn)
+	default:
+		return fmt.Sprintf("json_extract(%s, ?)", jsonColumn)
+	}
 }
 
 // buildJSONClause creates a GORM condition for JSON path fields
@@ -524,7 +734,7 @@ func (b *GORMBuilder) buildJSONClause(f *filter.LogicalFilter) (filter.Clause, e
 	// Handle different operators using datatypes.JSONQuery methods
 	switch f.Operator() {
 	case filter.OpEq:
-		condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Equals(f.Value(), jsonPath))
+		condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Equals(f.Value(), quotePath(jsonPath)))
 		return NewGormConditionClause(condition, f.Field()), nil
 	case filter.OpNe:
 		condition := conditionBuilderDB.Where(b.buildJSONQuery("<> ?", jsonColumn, jsonPath, f.Value()))
@@ -542,33 +752,69 @@ func (b *GORMBuilder) buildJSONClause(f *filter.LogicalFilter) (filter.Clause, e
 		query, params := b.buildJSONQuery("<=", jsonColumn, jsonPath, f.Value())
 		return NewSQLClause(query, "", params...), nil
 	case filter.OpNull:
-		condition := conditionBuilderDB.Where("? IS NULL", datatypes.JSONQuery(jsonColumn).Extract(jsonPath))
+		condition := conditionBuilderDB.Where("? IS NULL", datatypes.JSONQuery(jsonColumn).Extract(quotePath(jsonPath)))
 		return NewGormConditionClause(condition, f.Field()), nil
 	case filter.OpNnull:
-		condition := conditionBuilderDB.Where("? IS NOT NULL", datatypes.JSONQuery(jsonColumn).Extract(jsonPath))
+		condition := conditionBuilderDB.Where("? IS NOT NULL", datatypes.JSONQuery(jsonColumn).Extract(quotePath(jsonPath)))
 		return NewGormConditionClause(condition, f.Field()), nil
 	default:
-		// For pattern matching operators, we need to handle them specially
+		// For pattern matching operators, build explicit SQL using the dialect's
+		// JSON extract expression and the appropriate LIKE/GLOB operator. The
+		// forms come from the shared dialectPatterns structure, matching the
+		// non-JSON buildCondition path.
+		extract := b.jsonExtractExpr(jsonColumn)
+		pat, ok := dialectPatterns[b.dialectName()]
+		if !ok {
+			pat = dialectPatterns[""]
+		}
+		likeOp, notLikeOp := pat.ciLike, pat.ciNotLike
+
+		// fmtPattern formats a LIKE pattern with LIKE wildcards (% _).
+		fmtPattern := func(v any, format string) string {
+			return fmt.Sprintf(format, v)
+		}
+
+		// fmtGlobPattern formats a GLOB pattern, translating LIKE wildcards
+		// (% _) to GLOB wildcards (* ?) when the dialect uses GLOB.
+		fmtGlobPattern := func(v any, format string) string {
+			s := fmt.Sprintf(format, v)
+			if pat.csTranslate {
+				return translateGlob(s)
+			}
+			return s
+		}
+
+		var pattern string
+		var query string
 		switch f.Operator() {
-		case filter.OpContains, filter.OpContainss:
-			condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%%%v%%", f.Value()), jsonPath))
-			return NewGormConditionClause(condition, f.Field()), nil
-		case filter.OpNcontains, filter.OpNcontainss:
-			// For NOT LIKE operations, we need to negate the LIKE condition
-			jsonQuery := datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%%%v%%", f.Value()), jsonPath)
-			condition := conditionBuilderDB.Where("NOT (?)", jsonQuery)
-			return NewGormConditionClause(condition, f.Field()), nil
-		case filter.OpStartswith, filter.OpStartswiths, filter.OpNstartswith, filter.OpNstartswiths:
-			// Handle startswith by using LIKE with appropriate pattern
-			condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%v%%", f.Value()), jsonPath))
-			return NewGormConditionClause(condition, f.Field()), nil
-		case filter.OpEndswith, filter.OpEndswiths, filter.OpNendswith, filter.OpNendswiths:
-			// Handle endswith by using LIKE with appropriate pattern
-			condition := conditionBuilderDB.Where(datatypes.JSONQuery(jsonColumn).Likes(fmt.Sprintf("%%%v", f.Value()), jsonPath))
-			return NewGormConditionClause(condition, f.Field()), nil
+		case filter.OpContains:
+			query, pattern = extract+" "+likeOp, fmtPattern(f.Value(), "%%%v%%")
+		case filter.OpContainss:
+			query, pattern = extract+" "+pat.csLike, fmtGlobPattern(f.Value(), "%%%v%%")
+		case filter.OpNcontains:
+			query, pattern = extract+" "+notLikeOp, fmtPattern(f.Value(), "%%%v%%")
+		case filter.OpNcontainss:
+			query, pattern = extract+" "+pat.csNotLike, fmtGlobPattern(f.Value(), "%%%v%%")
+		case filter.OpStartswith:
+			query, pattern = extract+" "+likeOp, fmtPattern(f.Value(), "%v%%")
+		case filter.OpStartswiths:
+			query, pattern = extract+" "+pat.csLike, fmtGlobPattern(f.Value(), "%v%%")
+		case filter.OpNstartswith:
+			query, pattern = extract+" "+notLikeOp, fmtPattern(f.Value(), "%v%%")
+		case filter.OpNstartswiths:
+			query, pattern = extract+" "+pat.csNotLike, fmtGlobPattern(f.Value(), "%v%%")
+		case filter.OpEndswith:
+			query, pattern = extract+" "+likeOp, fmtPattern(f.Value(), "%%%v")
+		case filter.OpEndswiths:
+			query, pattern = extract+" "+pat.csLike, fmtGlobPattern(f.Value(), "%%%v")
+		case filter.OpNendswith:
+			query, pattern = extract+" "+notLikeOp, fmtPattern(f.Value(), "%%%v")
+		case filter.OpNendswiths:
+			query, pattern = extract+" "+pat.csNotLike, fmtGlobPattern(f.Value(), "%%%v")
 		default:
-			// If we get here, the operator is not supported for JSON fields
 			return nil, fmt.Errorf("unsupported operator for JSON field: %s", f.Operator())
 		}
+
+		return NewSQLClause(query, "", jsonPathExpr(jsonPath), pattern), nil
 	}
 }

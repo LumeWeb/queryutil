@@ -166,7 +166,15 @@ func (p *QueryParamParser) buildFilters(data any) ([]filter.CrudFilter, error) {
 func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, error) {
 	var filters []filter.CrudFilter
 
-	for key, value := range m {
+	// Sort keys for deterministic output; Go map iteration order is randomized.
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value := m[key]
 		switch key {
 		case "and", "or", "not":
 			// Handle nested conditional filters that might be wrapped in arrays
@@ -177,9 +185,6 @@ func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, 
 			filters = append(filters, conditionalFilters...)
 		default:
 			logicalFilter, err := p.buildLogicalFilter(key, value)
-			if err != nil {
-			} else {
-			}
 			if err != nil {
 				return nil, err
 			}

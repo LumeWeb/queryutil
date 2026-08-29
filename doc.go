@@ -24,7 +24,7 @@
 //  filteredQuery, err := gormBuilder.Apply(query, filters)
 //  
 //  // Apply sorting and pagination
-//  filteredQuery = gormBuilder.ApplySorts(filteredQuery, sorts)
+//  filteredQuery = builder.ApplySorts(filteredQuery, sorts)
 //  filteredQuery = filteredQuery.Limit(pagination.GetLimit()).Offset(pagination.GetOffset())
 //  
 //  // Execute and format response
