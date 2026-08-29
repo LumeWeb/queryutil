@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"os"
 	"sort"
 	"testing"
 
@@ -8,9 +9,33 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/datatypes"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+// openTestDB opens the test database. When QUERYUTIL_TEST_DSN is set it connects
+// to that MySQL instance (used for dialect coverage against a real MySQL in
+// Docker); otherwise it uses an in-memory SQLite database identified by
+// sqliteName.
+func openTestDB(t *testing.T, sqliteName string) *gorm.DB {
+	t.Helper()
+	if dsn := os.Getenv("QUERYUTIL_TEST_DSN"); dsn != "" {
+		db, err := gorm.Open(mysql.Open(dsn))
+		if err != nil {
+			t.Fatalf("failed to open MySQL test DB: %v", err)
+		}
+		return db
+	}
+	db, err := gorm.Open(sqlite.Open(sqliteName))
+	if err != nil {
+		t.Fatalf("failed to open SQLite test DB: %v", err)
+	}
+	if sqlDB, cerr := db.DB(); cerr == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
+	return db
+}
 
 func TestGORMBuilder_ApplyFilters(t *testing.T) {
 	type User struct {
@@ -24,14 +49,9 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 		Metadata datatypes.JSON
 	}
 
-	// Open database connection with logger
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, cerr := db.DB(); cerr == nil {
-		t.Cleanup(func() { _ = sqlDB.Close() })
-	}
+	// Open database connection (SQLite by default; MySQL via QUERYUTIL_TEST_DSN)
+	db := openTestDB(t, "file::memory:?cache=shared")
+	var err error
 
 	err = db.AutoMigrate(&User{})
 	if err != nil {
@@ -664,4 +684,103 @@ func TestGORMBuilder_ApplyFilters(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGORMBuilder_TableAwareQualifiedColumns verifies that dotted fields whose
+// leading identifier names a table/alias in the query's FROM/JOINs are treated
+// as qualified columns rather than JSON paths, while JSON paths remain
+// backward compatible when the identifier is not a known table.
+func TestGORMBuilder_TableAwareQualifiedColumns(t *testing.T) {
+	type Directory struct {
+		ID        uint
+		CreatedAt int64
+	}
+	type File struct {
+		ID          uint
+		DirectoryID uint
+		Status      string
+		CreatedAt   int64
+		Metadata    datatypes.JSON
+	}
+
+	db := openTestDB(t, "file:gorm_builder_table_aware?mode=memory&cache=shared")
+
+	require.NoError(t, db.AutoMigrate(&Directory{}, &File{}))
+
+	require.NoError(t, db.Create(&Directory{ID: 1, CreatedAt: 100}).Error)
+	require.NoError(t, db.Create(&Directory{ID: 2, CreatedAt: 200}).Error)
+	require.NoError(t, db.Create(&File{ID: 1, DirectoryID: 1, Status: "active", CreatedAt: 1000, Metadata: datatypes.JSON([]byte(`{"total_steps": 5}`))}).Error)
+	require.NoError(t, db.Create(&File{ID: 2, DirectoryID: 2, Status: "archived", CreatedAt: 2000, Metadata: datatypes.JSON([]byte(`{"total_steps": 9}`))}).Error)
+
+	t.Run("qualified column via table name", func(t *testing.T) {
+		builder := NewGORMBuilder(db, nil)
+		query := db.Table("files").Joins("LEFT JOIN directories ON directories.id = files.directory_id")
+		finalQuery, applyErr := builder.Apply(query, []filter.CrudFilter{
+			filter.NewLogicalFilter("files.status", filter.OpEq, "archived"),
+		})
+		require.NoError(t, applyErr)
+
+		var files []File
+		result := finalQuery.Find(&files)
+		require.NoError(t, result.Error)
+		assert.Equal(t, int64(1), result.RowsAffected)
+	})
+
+	t.Run("qualified column disambiguates shared column name", func(t *testing.T) {
+		builder := NewGORMBuilder(db, nil)
+		query := db.Table("files").Joins("LEFT JOIN directories ON directories.id = files.directory_id")
+		finalQuery, applyErr := builder.Apply(query, []filter.CrudFilter{
+			filter.NewLogicalFilter("files.created_at", filter.OpGte, 1000),
+			filter.NewLogicalFilter("directories.created_at", filter.OpLt, 150),
+		})
+		require.NoError(t, applyErr)
+
+		var files []File
+		result := finalQuery.Find(&files)
+		require.NoError(t, result.Error)
+		// Only file 1 (created_at 1000, directory created_at 100 < 150).
+		assert.Equal(t, int64(1), result.RowsAffected)
+	})
+
+	t.Run("qualified column via join alias", func(t *testing.T) {
+		builder := NewGORMBuilder(db, nil)
+		query := db.Table("files").Joins("LEFT JOIN directories d ON d.id = files.directory_id")
+		finalQuery, applyErr := builder.Apply(query, []filter.CrudFilter{
+			filter.NewLogicalFilter("d.created_at", filter.OpGt, 150),
+		})
+		require.NoError(t, applyErr)
+
+		var files []File
+		result := finalQuery.Find(&files)
+		require.NoError(t, result.Error)
+		assert.Equal(t, int64(1), result.RowsAffected)
+	})
+
+	t.Run("json path stays backward compatible on model query", func(t *testing.T) {
+		builder := NewGORMBuilder(db, nil)
+		query := db.Model(&File{})
+		finalQuery, applyErr := builder.Apply(query, []filter.CrudFilter{
+			filter.NewLogicalFilter("metadata.total_steps", filter.OpGt, 5),
+		})
+		require.NoError(t, applyErr)
+
+		var files []File
+		result := finalQuery.Find(&files)
+		require.NoError(t, result.Error)
+		assert.Equal(t, int64(1), result.RowsAffected)
+	})
+
+	t.Run("json path stays backward compatible on table query", func(t *testing.T) {
+		builder := NewGORMBuilder(db, nil)
+		query := db.Table("files").Joins("LEFT JOIN directories ON directories.id = files.directory_id")
+		finalQuery, applyErr := builder.Apply(query, []filter.CrudFilter{
+			filter.NewLogicalFilter("metadata.total_steps", filter.OpEq, 9),
+		})
+		require.NoError(t, applyErr)
+
+		var files []File
+		result := finalQuery.Find(&files)
+		require.NoError(t, result.Error)
+		assert.Equal(t, int64(1), result.RowsAffected)
+	})
 }

@@ -15,6 +15,7 @@ require (
 	go.lumeweb.com/portal-router v0.7.2
 	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9
 	gorm.io/datatypes v1.2.7
+	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
 )
@@ -61,7 +62,6 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/driver/mysql v1.6.0 // indirect
 )
 
 replace github.com/go-viper/mapstructure/v2 => github.com/LumeWeb/mapstructure/v2 v2.0.0-20241213212524-92525f5828be
