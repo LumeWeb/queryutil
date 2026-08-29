@@ -3,6 +3,7 @@ package builder
 import (
 	"os"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -756,6 +757,22 @@ func TestGORMBuilder_TableAwareQualifiedColumns(t *testing.T) {
 		assert.Equal(t, int64(1), result.RowsAffected)
 	})
 
+	t.Run("qualified column via model and join", func(t *testing.T) {
+		builder := NewGORMBuilder(db, nil)
+		// Model-based queries defer Statement.Table resolution; the model's table
+		// must still be recognized so files.status routes as a qualified column.
+		query := db.Model(&File{}).Joins("LEFT JOIN directories ON directories.id = files.directory_id")
+		finalQuery, applyErr := builder.Apply(query, []filter.CrudFilter{
+			filter.NewLogicalFilter("files.status", filter.OpEq, "archived"),
+		})
+		require.NoError(t, applyErr)
+
+		var files []File
+		result := finalQuery.Find(&files)
+		require.NoError(t, result.Error)
+		assert.Equal(t, int64(1), result.RowsAffected)
+	})
+
 	t.Run("json path stays backward compatible on model query", func(t *testing.T) {
 		builder := NewGORMBuilder(db, nil)
 		query := db.Model(&File{})
@@ -783,4 +800,50 @@ func TestGORMBuilder_TableAwareQualifiedColumns(t *testing.T) {
 		require.NoError(t, result.Error)
 		assert.Equal(t, int64(1), result.RowsAffected)
 	})
+}
+
+// TestGORMBuilder_ApplyConcurrent exercises Apply from multiple goroutines on a
+// single shared builder to guarantee the known-table disambiguation state does
+// not race or leak across concurrent calls. Run with -race.
+func TestGORMBuilder_ApplyConcurrent(t *testing.T) {
+	type RaceDirectory struct {
+		ID   uint
+		Name string
+	}
+	type RaceFile struct {
+		ID          uint
+		DirectoryID uint
+		Status      string
+	}
+
+	db := openTestDB(t, "file:gorm_builder_race?mode=memory&cache=shared")
+	require.NoError(t, db.AutoMigrate(&RaceDirectory{}, &RaceFile{}))
+	require.NoError(t, db.Create(&RaceDirectory{ID: 1, Name: "d1"}).Error)
+	require.NoError(t, db.Create(&RaceFile{ID: 1, DirectoryID: 1, Status: "active"}).Error)
+	require.NoError(t, db.Create(&RaceFile{ID: 2, DirectoryID: 1, Status: "archived"}).Error)
+
+	builder := NewGORMBuilder(db, nil)
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make([]error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			q := db.Table("race_files").Joins("LEFT JOIN race_directories ON race_directories.id = race_files.directory_id")
+			fq, err := builder.Apply(q, []filter.CrudFilter{
+				filter.NewLogicalFilter("race_files.status", filter.OpEq, "active"),
+			})
+			if err == nil {
+				var out []RaceFile
+				err = fq.Find(&out).Error
+			}
+			errs[n] = err
+		}(i)
+	}
+	wg.Wait()
+	for i, e := range errs {
+		require.NoError(t, e, "worker %d", i)
+	}
 }

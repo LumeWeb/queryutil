@@ -91,8 +91,9 @@ type GORMBuilder struct {
 	searchConfig *filter.GlobalSearchConfig
 
 	// knownTables holds the table/alias names present in the query's FROM and JOINs
-	// (lowercased). It is populated at the start of Apply and used to disambiguate
-	// qualified columns from JSON paths in dotted field names.
+	// (lowercased), used to disambiguate qualified columns from JSON paths in dotted
+	// field names. It is per-query state carried on a per-Apply copy of the builder so
+	// the shared receiver handed to NewGORMBuilder stays immutable and race-free.
 	knownTables map[string]struct{}
 }
 
@@ -111,10 +112,18 @@ func (b *GORMBuilder) ApplySorts(query *gorm.DB, sorts []filter.Sort) *gorm.DB {
 }
 
 func (b *GORMBuilder) Apply(query *gorm.DB, filters []filter.CrudFilter) (*gorm.DB, error) {
-	// Capture the tables/aliases present in the target query so that dotted
-	// fields can be disambiguated between qualified columns and JSON paths.
-	b.knownTables = extractKnownTables(query)
+	// Capture the tables/aliases present in the target query so that dotted fields
+	// can be disambiguated between qualified columns and JSON paths. The table set
+	// is per-query state, so it lives on a per-call copy of the builder: the shared
+	// receiver must not be mutated (concurrent Apply on one builder stays race-free).
+	work := *b
+	work.knownTables = extractKnownTables(query)
+	return work.apply(query, filters)
+}
 
+// apply runs the visitor pipeline for a single Apply call against the receiver's
+// per-call knownTables snapshot.
+func (b *GORMBuilder) apply(query *gorm.DB, filters []filter.CrudFilter) (*gorm.DB, error) {
 	for _, f := range filters {
 		// 1. Convert CrudFilter to Clause using the Visitor pattern
 		clause, err := f.AcceptVisitor(b) // Calls b.VisitLogical or b.VisitConditional
@@ -407,6 +416,13 @@ func extractKnownTables(query *gorm.DB) map[string]struct{} {
 	}
 
 	stmt := query.Statement
+	// For Model-based queries GORM defers Statement.Table resolution until SQL
+	// build time, leaving it empty here. Materialize it so the model's table is
+	// recognized as a known identifier. A failed parse leaves Table empty and
+	// falls back to legacy behavior.
+	if stmt.Table == "" && stmt.Model != nil {
+		_ = stmt.Parse(stmt.Model)
+	}
 	add(stmt.Table)
 	for _, join := range stmt.Joins {
 		table, alias := parseJoinName(join.Name)
