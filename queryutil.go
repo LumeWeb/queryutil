@@ -13,6 +13,8 @@ type (
 	RequestParser      = parser.Parser
 	Sort               = filter.Sort
 	SortConfig         = filter.SortConfig
+	QueryPolicy        = filter.QueryPolicy
+	FieldRule          = filter.FieldRule
 	SortOrder          = filter.SortOrder
 	CrudFilter         = filter.CrudFilter
 	GlobalSearchConfig = filter.GlobalSearchConfig
@@ -26,7 +28,7 @@ type (
 var (
 	NewPagination     = filter.NewPagination
 	CreatePage        = filter.CreatePage
-	DefaultPagination = filter.DefaultPagination 
+	DefaultPagination = filter.DefaultPagination
 	LargePagination   = filter.LargePagination
 	XLargePagination  = filter.XLargePagination
 	XXLargePagination = filter.XXLargePagination
@@ -72,7 +74,8 @@ const (
 
 // Re-exported variables
 var (
-	OperatorMap = filter.OperatorMap
+	OperatorMap     = filter.OperatorMap
+	ErrInvalidQuery = filter.ErrInvalidQuery
 )
 
 // QueryBuilder defines the interface for building query clauses
