@@ -32,6 +32,22 @@ func TestWithStringFieldsPreservesNestedAndArrayValues(t *testing.T) {
 	}
 }
 
+func TestWithStringFieldsRejectsNumericOperatorsWithoutPanicking(t *testing.T) {
+	for _, operator := range []string{"gt", "gte", "lt", "lte", "between", "nbetween"} {
+		t.Run(operator, func(t *testing.T) {
+			values := []string{"123"}
+			if operator == "between" || operator == "nbetween" {
+				values = []string{"123", "456"}
+			}
+			query := url.Values{"filters[fingerprint][" + operator + "]": values}
+			_, err := parser.NewQueryParamParser(query, parser.WithStringFields("fingerprint")).ParseFilters()
+			if err == nil {
+				t.Fatal("expected error for numeric operator on string-preserved field")
+			}
+		})
+	}
+}
+
 func TestWithoutStringFieldsStillCoercesNumbers(t *testing.T) {
 	filters, err := parser.NewQueryParamParser(url.Values{"filters[fingerprint][eq]": {"12345"}}).ParseFilters()
 	if err != nil {

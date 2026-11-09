@@ -386,6 +386,13 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 
 	convert := convertStringValue
 	if lo.Contains(p.config.StringFields, field) {
+		// These operators require numeric values. Keeping their operands as
+		// strings would either fail range validation or panic in NewLogicalFilter.
+		if operator == filter.OpGt || operator == filter.OpGte ||
+			operator == filter.OpLt || operator == filter.OpLte ||
+			operator == filter.OpBetween || operator == filter.OpNbetween {
+			return nil, fmt.Errorf("operator %q on string-preserved field %q requires numeric conversion", operator, field)
+		}
 		convert = preserveStringValue
 	}
 

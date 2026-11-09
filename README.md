@@ -107,7 +107,9 @@ if err != nil {
 ```
 
 The option also applies to nested filters and array values. It does not change
-other fields or JSON input. For direct query-parameter parsing, pass the option
+other fields or JSON input. Numeric comparison and range operators on a
+string-preserved field return an error rather than coercing their values.
+For direct query-parameter parsing, pass the option
 to `parser.NewQueryParamParser`; `NewHTTPRequestParser` accepts it as an
 optional fourth argument.
 
