@@ -42,6 +42,34 @@ func TestApplyFiltersRetainsBuilderErrorOnGORMQuery(t *testing.T) {
 	}
 }
 
+func TestApplyFiltersErrorDoesNotPoisonInputDB(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&compatRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&compatRecord{ID: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// The first filter fails before GORMBuilder has cloned the input DB.
+	failed := queryutil.ApplyFilters(db, []queryutil.CrudFilter{
+		queryutil.NewLogicalFilter("payload.status", queryutil.OpIn, []any{"active"}),
+	}, nil)
+	if failed.Error == nil {
+		t.Fatal("builder error lost")
+	}
+	if db.Error != nil {
+		t.Fatalf("shared DB was poisoned: %v", db.Error)
+	}
+	var count int64
+	if err := db.Model(&compatRecord{}).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("subsequent query count = %d, err = %v", count, err)
+	}
+}
+
 func TestApplyFiltersStillExecutesValidQuery(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

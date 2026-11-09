@@ -12,6 +12,9 @@ func ApplyFilters(tx *gorm.DB, filters []CrudFilter, searchConfig *GlobalSearchC
 	b := builder.NewGORMBuilder(tx, searchConfig)
 	result, err := b.Apply(tx, filters)
 	if err != nil {
+		// Apply may return tx itself when the first filter fails. Keep errors
+		// off the caller's handle, which may be shared by unrelated queries.
+		result = result.Session(&gorm.Session{})
 		result.AddError(err)
 	}
 	return result
