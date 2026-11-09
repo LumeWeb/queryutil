@@ -75,9 +75,11 @@ const (
 
 // Re-exported variables
 var (
-	OperatorMap      = filter.OperatorMap
-	ErrInvalidQuery  = filter.ErrInvalidQuery
-	WithStringFields = parser.WithStringFields
+	OperatorMap         = filter.OperatorMap
+	ErrInvalidQuery     = filter.ErrInvalidQuery
+	WithStringFields    = parser.WithStringFields
+	AllScalarFieldRules = filter.AllScalarFieldRules
+	ScalarOperators     = filter.ScalarOperators
 )
 
 // QueryBuilder defines the interface for building query clauses
