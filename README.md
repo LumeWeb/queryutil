@@ -91,6 +91,33 @@ db = queryutil.ApplySort(db, sorts)
 db = db.Offset(pagination.GetOffset()).Limit(pagination.GetLimit())
 ```
 
+### Restricting untrusted queries
+
+Parsing alone does not authorize filter or sort fields. Validate at the service
+boundary as well as at HTTP entry points, before calling `ApplyFilters` or
+`ApplySort`:
+
+```go
+policy := queryutil.QueryPolicy{
+    Fields: map[string]queryutil.FieldRule{
+        "id":          {Operators: []queryutil.Operator{queryutil.OpEq}},
+        "fingerprint": {Operators: []queryutil.Operator{queryutil.OpEq}, Convert: decodeFingerprint},
+    },
+    SortFields: []string{"id", "fingerprint"},
+}
+safeFilters, err := policy.Normalize(filters, sorts)
+if err != nil {
+    return err // reject the request; do not build a query
+}
+// Use safeFilters (not filters) for ApplyFilters; sorts have been validated too.
+```
+
+`Convert` has signature `func(queryutil.Operator, any) (any, error)` and receives
+the full value (including arrays for IN/BETWEEN). It runs for matching fields
+at every depth of AND/OR/NOT groups. The returned filter nodes are new;
+mutable values without a converter may still be shared with the input.
+Configure permitted operators and sort fields explicitly.
+
 ### Individual Parameter Parsing
 
 You can also parse parameters individually if needed:
