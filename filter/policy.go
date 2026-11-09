@@ -165,6 +165,31 @@ func AllScalarFieldRules(fields ...string) map[string]FieldRule {
 	return rules
 }
 
+// comparableOperators excludes pattern matching and null checks.
+var comparableOperators = [...]Operator{
+	OpEq, OpNe, OpLt, OpGt, OpLte, OpGte,
+	OpIn, OpNin, OpBetween, OpNbetween,
+}
+
+// ComparableOperators returns a fresh copy of the equality, range, IN, and
+// BETWEEN operators. It excludes pattern and null operators.
+func ComparableOperators() []Operator {
+	operators := make([]Operator, len(comparableOperators))
+	copy(operators, comparableOperators[:])
+	return operators
+}
+
+// ComparableFieldRules returns independent comparable rules for each field.
+// Use it only when every listed operator is appropriate for those fields.
+// Sort fields must still be explicitly allowlisted on the QueryPolicy.
+func ComparableFieldRules(fields ...string) map[string]FieldRule {
+	rules := make(map[string]FieldRule, len(fields))
+	for _, field := range fields {
+		rules[field] = FieldRule{Operators: ComparableOperators()}
+	}
+	return rules
+}
+
 // Only operators implemented by the scalar query builder are valid even if a
 // policy accidentally lists an unsupported operator.
 func supportedPolicyOperator(op Operator) bool {

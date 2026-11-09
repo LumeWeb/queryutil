@@ -142,7 +142,10 @@ If every operator supported for scalar fields is appropriate, use
 `queryutil.AllScalarFieldRules("id", "created_at")` to build those field rules,
 or `queryutil.ScalarOperators()` for an individual rule. Both return fresh
 operator slices; prefer explicit per-field lists when fewer operators are safe.
-Sort fields must still be declared separately.
+For equality, range, IN, and BETWEEN without pattern or null operators, use
+`queryutil.ComparableFieldRules("id", "created_at")` or
+`queryutil.ComparableOperators()` for a single rule. These also return
+independent operator slices. Sort fields must still be declared separately.
 
 Configure permitted operators and sort fields explicitly. The special `q`
 field supports only `OpContains` (and needs a configured global search); dotted
