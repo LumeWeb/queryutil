@@ -138,6 +138,12 @@ if err != nil {
 the full value (including arrays for IN/BETWEEN). It runs for matching fields
 at every depth of AND/OR/NOT groups. The returned filter nodes are new;
 mutable values without a converter may still be shared with the input.
+If every operator supported for scalar fields is appropriate, use
+`queryutil.AllScalarFieldRules("id", "created_at")` to build those field rules,
+or `queryutil.ScalarOperators()` for an individual rule. Both return fresh
+operator slices; prefer explicit per-field lists when fewer operators are safe.
+Sort fields must still be declared separately.
+
 Configure permitted operators and sort fields explicitly. The special `q`
 field supports only `OpContains` (and needs a configured global search); dotted
 fields cannot use array or range operators because they may be JSON paths.

@@ -134,16 +134,44 @@ func containsOperator(operators []Operator, op Operator) bool {
 	return false
 }
 
-// Only operators implemented by the query builder are valid even if a policy
-// accidentally lists an unsupported operator.
+// scalarOperators is the set supported by the scalar query builder. Keep it
+// private so callers cannot mutate the policy's supported-operator set.
+var scalarOperators = [...]Operator{
+	OpEq, OpNe, OpLt, OpGt, OpLte, OpGte,
+	OpIn, OpNin, OpBetween, OpNbetween,
+	OpNull, OpNnull, OpContains, OpContainss,
+	OpNcontains, OpNcontainss, OpStartswith, OpStartswiths,
+	OpNstartswith, OpNstartswiths, OpEndswith, OpEndswiths,
+	OpNendswith, OpNendswiths,
+}
+
+// ScalarOperators returns a fresh copy of every operator supported for scalar
+// fields. Use a narrower list when the field should permit fewer operations.
+func ScalarOperators() []Operator {
+	operators := make([]Operator, len(scalarOperators))
+	copy(operators, scalarOperators[:])
+	return operators
+}
+
+// AllScalarFieldRules returns a rule for each field with every scalar
+// comparison operator enabled. Use it only when each field should permit all
+// operators; declare a narrower FieldRule otherwise. Sorts remain opt-in.
+// Each call and field gets its own operator slice to prevent accidental sharing.
+func AllScalarFieldRules(fields ...string) map[string]FieldRule {
+	rules := make(map[string]FieldRule, len(fields))
+	for _, field := range fields {
+		rules[field] = FieldRule{Operators: ScalarOperators()}
+	}
+	return rules
+}
+
+// Only operators implemented by the scalar query builder are valid even if a
+// policy accidentally lists an unsupported operator.
 func supportedPolicyOperator(op Operator) bool {
-	switch op {
-	case OpEq, OpNe, OpLt, OpGt, OpLte, OpGte, OpIn, OpNin,
-		OpBetween, OpNbetween, OpNull, OpNnull,
-		OpContains, OpContainss, OpNcontains, OpNcontainss,
-		OpStartswith, OpStartswiths, OpNstartswith, OpNstartswiths,
-		OpEndswith, OpEndswiths, OpNendswith, OpNendswiths:
-		return true
+	for _, supported := range scalarOperators {
+		if supported == op {
+			return true
+		}
 	}
 	return false
 }
