@@ -46,6 +46,38 @@ func TestPolicyConvertsNestedFingerprintWithoutMutatingInput(t *testing.T) {
 	}
 }
 
+func TestPolicyRejectsOperatorsBuilderCannotApply(t *testing.T) {
+	policy := filter.QueryPolicy{Fields: map[string]filter.FieldRule{
+		"metadata.status": {Operators: []filter.Operator{filter.OpEq, filter.OpIn, filter.OpNin, filter.OpBetween, filter.OpNbetween}},
+		"q":               {Operators: []filter.Operator{filter.OpEq, filter.OpNe, filter.OpContains}},
+	}}
+	for _, tc := range []struct {
+		name string
+		item filter.CrudFilter
+	}{
+		{"json in", filter.NewLogicalFilter("metadata.status", filter.OpIn, []any{"active"})},
+		{"json not in", filter.NewLogicalFilter("metadata.status", filter.OpNin, []any{"active"})},
+		{"json between", filter.NewLogicalFilter("metadata.status", filter.OpBetween, []any{1, 2})},
+		{"json not between", filter.NewLogicalFilter("metadata.status", filter.OpNbetween, []any{1, 2})},
+		{"q eq", filter.NewLogicalFilter("q", filter.OpEq, "active")},
+		{"q ne", filter.NewLogicalFilter("q", filter.OpNe, "active")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := policy.Normalize([]filter.CrudFilter{tc.item}, nil); !errors.Is(err, filter.ErrInvalidQuery) {
+				t.Fatalf("expected ErrInvalidQuery, got %v", err)
+			}
+		})
+	}
+	for _, item := range []filter.CrudFilter{
+		filter.NewLogicalFilter("metadata.status", filter.OpEq, "active"),
+		filter.NewLogicalFilter("q", filter.OpContains, "active"),
+	} {
+		if _, err := policy.Normalize([]filter.CrudFilter{item}, nil); err != nil {
+			t.Fatalf("supported operator rejected: %v", err)
+		}
+	}
+}
+
 type customFilter struct{ *filter.LogicalFilter }
 
 func TestPolicyRejectsUnsafeOrMalformedInput(t *testing.T) {

@@ -116,7 +116,9 @@ if err != nil {
 the full value (including arrays for IN/BETWEEN). It runs for matching fields
 at every depth of AND/OR/NOT groups. The returned filter nodes are new;
 mutable values without a converter may still be shared with the input.
-Configure permitted operators and sort fields explicitly.
+Configure permitted operators and sort fields explicitly. The special `q`
+field supports only `OpContains` (and needs a configured global search); dotted
+fields cannot use array or range operators because they may be JSON paths.
 
 ### Individual Parameter Parsing
 

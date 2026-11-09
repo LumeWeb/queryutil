@@ -3,6 +3,7 @@ package filter
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrInvalidQuery indicates that a filter or sort does not satisfy a QueryPolicy.
@@ -59,7 +60,9 @@ func (p QueryPolicy) normalize(filters []CrudFilter, depth int) ([]CrudFilter, e
 				return nil, fmt.Errorf("%w: nil filter", ErrInvalidQuery)
 			}
 			rule, ok := p.Fields[f.Field()]
-			if !ok || !supportedPolicyOperator(f.Operator()) || !containsOperator(rule.Operators, f.Operator()) {
+			if !ok || !supportedPolicyOperator(f.Operator()) || !containsOperator(rule.Operators, f.Operator()) ||
+				(f.Field() == "q" && f.Operator() != OpContains) ||
+				(strings.Contains(f.Field(), ".") && unsupportedJSONOperator(f.Operator())) {
 				return nil, fmt.Errorf("%w: field %q operator %q", ErrInvalidQuery, f.Field(), f.Operator())
 			}
 			value := f.Value()
@@ -110,6 +113,16 @@ func checkedLogicalFilter(field string, op Operator, value any) (node *LogicalFi
 		}
 	}()
 	return NewLogicalFilter(field, op, value), nil
+}
+
+// Dotted fields may be interpreted as JSON paths by the query builder. Reject
+// operators its JSON path implementation cannot handle, even when allowlisted.
+func unsupportedJSONOperator(op Operator) bool {
+	switch op {
+	case OpIn, OpNin, OpBetween, OpNbetween:
+		return true
+	}
+	return false
 }
 
 func containsOperator(operators []Operator, op Operator) bool {
