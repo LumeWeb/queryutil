@@ -1,3 +1,13 @@
+## 0.3.20 (2026-11-09)
+
+### Features
+
+- add opt-in query policy
+
+### Fixes
+
+- reject unsupported policy operations
+
 ## 0.3.19 (2026-08-29)
 
 ### Fixes
