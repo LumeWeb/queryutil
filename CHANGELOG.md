@@ -1,3 +1,10 @@
+## 0.3.21 (2026-11-09)
+
+### Fixes
+
+- preserve configured query field text
+- reject numeric ops on preserved text
+
 ## 0.3.20 (2026-11-09)
 
 ### Features

@@ -1,4 +1,4 @@
-module go.lumeweb.com/queryutil // v0.3.20
+module go.lumeweb.com/queryutil // v0.3.21
 
 go 1.24.13
 
