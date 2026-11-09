@@ -16,8 +16,8 @@ import (
 type InputFormat int
 
 const (
-	FormatJSON InputFormat = iota // JSON format for complex nested filters
-	FormatQueryParams             // URL query parameters format
+	FormatJSON        InputFormat = iota // JSON format for complex nested filters
+	FormatQueryParams                    // URL query parameters format
 )
 
 // ParserOption configures parser options through functional options pattern
@@ -44,6 +44,7 @@ type ParserOptions struct {
 	SearchConfig *filter.GlobalSearchConfig // Configuration for global search parameters
 	SortConfig   *filter.SortConfig         // Valid sort fields configuration
 	InputFormat  InputFormat                // Preferred input format (JSON or query params)
+	StringFields []string                   // Query-parameter fields whose values remain strings
 }
 
 // DefaultParserOptions returns the default parser configuration:
@@ -58,6 +59,15 @@ func DefaultParserOptions() ParserOptions {
 func WithSearchConfig(cfg *filter.GlobalSearchConfig) ParserOption {
 	return func(o *ParserOptions) {
 		o.SearchConfig = cfg
+	}
+}
+
+// WithStringFields preserves the values of these query-parameter fields as strings,
+// including values in nested filters and arrays. Other fields retain default coercion.
+// JSON input is unaffected because JSON already distinguishes strings from numbers.
+func WithStringFields(fields ...string) ParserOption {
+	return func(o *ParserOptions) {
+		o.StringFields = append([]string(nil), fields...)
 	}
 }
 

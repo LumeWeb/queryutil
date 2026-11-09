@@ -46,23 +46,25 @@ func ParseQueryWithSearch(query map[string][]string, searchConfig *filter.Global
 // HTTPRequestParser implements the RequestParser interface for HTTP requests.
 // It provides a way to parse query parameters from an HTTP request's URL query.
 type HTTPRequestParser struct {
-	Query        url.Values
-	SearchConfig *filter.GlobalSearchConfig
-	sortConfig   *filter.SortConfig
+	Query         url.Values
+	SearchConfig  *filter.GlobalSearchConfig
+	sortConfig    *filter.SortConfig
+	parserOptions []parser.ParserOption
 }
 
 // NewHTTPRequestParser creates a new HTTPRequestParser from an http.Request
-func NewHTTPRequestParser(r *http.Request, searchConfig *filter.GlobalSearchConfig, sortConfig *filter.SortConfig) *HTTPRequestParser {
+func NewHTTPRequestParser(r *http.Request, searchConfig *filter.GlobalSearchConfig, sortConfig *filter.SortConfig, opts ...parser.ParserOption) *HTTPRequestParser {
 	return &HTTPRequestParser{
-		Query:        r.URL.Query(),
-		SearchConfig: searchConfig,
-		sortConfig:   sortConfig,
+		Query:         r.URL.Query(),
+		SearchConfig:  searchConfig,
+		sortConfig:    sortConfig,
+		parserOptions: append([]parser.ParserOption(nil), opts...),
 	}
 }
 
 // ParseFilters implements RequestParser.ParseFilters
 func (p *HTTPRequestParser) ParseFilters() ([]filter.CrudFilter, error) {
-	return parser.NewQueryParamParser(p.Query).ParseFilters()
+	return parser.NewQueryParamParser(p.Query, p.parserOptions...).ParseFilters()
 }
 
 // ParseSorts implements RequestParser.ParseSorts
@@ -90,9 +92,14 @@ func (p *HTTPRequestParser) ParsePagination() (Pagination, error) {
 // ParseRequest parses all query parameters from an HTTP request.
 // This is maintained for backward compatibility with older code.
 func ParseRequest(r any) ([]CrudFilter, []Sort, Pagination, error) {
+	return ParseRequestWithOptions(r)
+}
+
+// ParseRequestWithOptions parses an HTTP request with query-parameter parser options.
+// Use WithStringFields to preserve selected field values before validating them.
+func ParseRequestWithOptions(r any, opts ...parser.ParserOption) ([]CrudFilter, []Sort, Pagination, error) {
 	if req, ok := r.(*http.Request); ok {
-		filters, sorts, pagination, err := ParseFromSource(NewHTTPRequestParser(req, nil, nil))
-		return filters, sorts, pagination, err
+		return ParseFromSource(NewHTTPRequestParser(req, nil, nil, opts...))
 	}
 	return nil, nil, Pagination{}, fmt.Errorf("unsupported request type")
 }

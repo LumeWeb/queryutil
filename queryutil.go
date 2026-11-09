@@ -11,6 +11,7 @@ import (
 type (
 	// RequestParser re-exports the parser.Parser interface
 	RequestParser      = parser.Parser
+	ParserOption       = parser.ParserOption
 	Sort               = filter.Sort
 	SortConfig         = filter.SortConfig
 	QueryPolicy        = filter.QueryPolicy
@@ -74,8 +75,9 @@ const (
 
 // Re-exported variables
 var (
-	OperatorMap     = filter.OperatorMap
-	ErrInvalidQuery = filter.ErrInvalidQuery
+	OperatorMap      = filter.OperatorMap
+	ErrInvalidQuery  = filter.ErrInvalidQuery
+	WithStringFields = parser.WithStringFields
 )
 
 // QueryBuilder defines the interface for building query clauses

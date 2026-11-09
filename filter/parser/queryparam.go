@@ -310,6 +310,24 @@ func convertStringValue(value any) (any, error) {
 	}
 }
 
+// preserveStringValue retains the values supplied by url.Values without
+// coercion, while keeping the array shape expected by filter operators.
+func preserveStringValue(value any) (any, error) {
+	switch v := value.(type) {
+	case []string:
+		if len(v) == 0 {
+			return nil, fmt.Errorf("empty array value")
+		}
+		items := make([]any, len(v))
+		for i, s := range v {
+			items[i] = s
+		}
+		return items, nil
+	default:
+		return value, nil
+	}
+}
+
 // isNumericType checks if a value is an integer or float type.
 func isNumericType(val any) (isNumeric bool, typeName string) {
 	switch val.(type) {
@@ -366,6 +384,18 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 		}
 	}
 
+	convert := convertStringValue
+	if lo.Contains(p.config.StringFields, field) {
+		// These operators require numeric values. Keeping their operands as
+		// strings would either fail range validation or panic in NewLogicalFilter.
+		if operator == filter.OpGt || operator == filter.OpGte ||
+			operator == filter.OpLt || operator == filter.OpLte ||
+			operator == filter.OpBetween || operator == filter.OpNbetween {
+			return nil, fmt.Errorf("operator %q on string-preserved field %q requires numeric conversion", operator, field)
+		}
+		convert = preserveStringValue
+	}
+
 	var parsedVal any
 	var err error
 	isProcessedAsNullOp := false
@@ -377,7 +407,7 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 		} else if rawValForOpProcessing == nil {
 			parsedVal = nil
 		} else {
-			tempVal, _ := convertStringValue(rawValForOpProcessing)
+			tempVal, _ := convert(rawValForOpProcessing)
 			return nil, fmt.Errorf("operator %q on field %q does not accept values, got: %v", operator, field, tempVal)
 		}
 	} else if operator.RequiresArray() {
@@ -402,9 +432,9 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 				}
 				indexedStrValues = append(indexedStrValues, idxRawValSlice[0])
 			}
-			parsedVal, err = convertStringValue(indexedStrValues)
+			parsedVal, err = convert(indexedStrValues)
 		} else {
-			parsedVal, err = convertStringValue(rawValForOpProcessing)
+			parsedVal, err = convert(rawValForOpProcessing)
 		}
 	} else {
 		rvs, ok := rawValForOpProcessing.([]string)
@@ -415,9 +445,9 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 			return nil, fmt.Errorf("operator %q on field %q received multiple values %v but expected one", operator, field, rvs)
 		}
 		if len(rvs) == 0 {
-			parsedVal, err = convertStringValue("")
+			parsedVal, err = convert("")
 		} else {
-			parsedVal, err = convertStringValue(rvs[0])
+			parsedVal, err = convert(rvs[0])
 		}
 	}
 

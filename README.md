@@ -91,6 +91,28 @@ db = queryutil.ApplySort(db, sorts)
 db = db.Offset(pagination.GetOffset()).Limit(pagination.GetLimit())
 ```
 
+### Preserve string-valued query fields
+
+URL query values normally undergo numeric and boolean coercion. Use
+`WithStringFields` when a field's exact text must reach validation unchanged:
+
+```go
+filters, sorts, _, err := queryutil.ParseRequestWithOptions(
+    r, queryutil.WithStringFields("fingerprint"),
+)
+if err != nil {
+    return err
+}
+// Validate filters and sorts with a QueryPolicy before building a query.
+```
+
+The option also applies to nested filters and array values. It does not change
+other fields or JSON input. Numeric comparison and range operators on a
+string-preserved field return an error rather than coercing their values.
+For direct query-parameter parsing, pass the option
+to `parser.NewQueryParamParser`; `NewHTTPRequestParser` accepts it as an
+optional fourth argument.
+
 ### Restricting untrusted queries
 
 Parsing alone does not authorize filter or sort fields. Validate at the service
