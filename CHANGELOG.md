@@ -1,3 +1,9 @@
+## 0.3.23 (2026-11-09)
+
+### Features
+
+- add comparable operator preset
+
 ## 0.3.22 (2026-11-09)
 
 ### Features
