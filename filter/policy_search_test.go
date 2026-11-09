@@ -33,6 +33,27 @@ func TestPolicyNormalizesQEqualityToContainsInsideGroups(t *testing.T) {
 	}
 }
 
+func TestPolicyKeepsNumericAndBooleanSearchText(t *testing.T) {
+	policy := filter.QueryPolicy{Fields: map[string]filter.FieldRule{"q": {Operators: []filter.Operator{filter.OpContains}}}}
+	for _, tc := range []struct {
+		query url.Values
+		want  string
+	}{
+		{url.Values{"q": {"00123"}}, "00123"},
+		{url.Values{"filters[q][eq]": {"true"}}, "true"},
+		{url.Values{"filters[q][contains]": {"000"}}, "000"},
+	} {
+		filters, err := parser.NewQueryParamParser(tc.query).ParseFilters()
+		if err != nil {
+			t.Fatal(err)
+		}
+		safe, err := policy.Normalize(filters, nil)
+		if err != nil || safe[0].GetOperator() != filter.OpContains || safe[0].GetValue() != tc.want {
+			t.Fatalf("query %v: normalized = %v, err = %v", tc.query, safe, err)
+		}
+	}
+}
+
 func TestPolicyAcceptsParsedQEqualityOnlyWhenContainsAllowed(t *testing.T) {
 	policy := filter.QueryPolicy{Fields: map[string]filter.FieldRule{"q": {Operators: []filter.Operator{filter.OpContains}}}}
 	for _, query := range []url.Values{

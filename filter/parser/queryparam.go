@@ -385,7 +385,9 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 	}
 
 	convert := convertStringValue
-	if lo.Contains(p.config.StringFields, field) {
+	// q is a search term, not a typed column value. Preserve its text even
+	// without an explicit option so numeric-looking terms keep leading zeros.
+	if field == "q" || lo.Contains(p.config.StringFields, field) {
 		// These operators require numeric values. Keeping their operands as
 		// strings would either fail range validation or panic in NewLogicalFilter.
 		if operator == filter.OpGt || operator == filter.OpGte ||
