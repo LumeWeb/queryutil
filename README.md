@@ -148,8 +148,9 @@ For equality, range, IN, and BETWEEN without pattern or null operators, use
 independent operator slices. Sort fields must still be declared separately.
 
 Configure permitted operators and sort fields explicitly. The special `q`
-field supports only `OpContains` (and needs a configured global search); dotted
-fields cannot use array or range operators because they may be JSON paths.
+field requires `OpContains` in the policy; `q[eq]` is accepted as an alias
+and normalized to `OpContains`. Search needs a configured global search;
+dotted fields cannot use array or range operators because they may be JSON paths.
 
 ### Individual Parameter Parsing
 
