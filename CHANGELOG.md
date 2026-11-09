@@ -1,3 +1,9 @@
+## 0.3.22 (2026-11-09)
+
+### Features
+
+- expose scalar operator policy helpers
+
 ## 0.3.21 (2026-11-09)
 
 ### Fixes
