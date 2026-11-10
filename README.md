@@ -152,6 +152,8 @@ Configure permitted operators and sort fields explicitly. The special `q`
 field requires `OpContains` in the policy; `q[eq]` is accepted as an alias
 and normalized to `OpContains`. Search needs a configured global search;
 dotted fields cannot use array or range operators because they may be JSON paths.
+Dotted JSON-path fields reject invalid UTF-8 and control bytes (including NUL)
+before database execution; empty segments remain valid empty JSON keys.
 
 ### Policy-aware HTTP lists
 

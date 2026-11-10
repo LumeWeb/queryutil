@@ -65,6 +65,11 @@ func (p QueryPolicy) normalize(filters []CrudFilter, depth int) ([]CrudFilter, e
 			if f.Field() == "q" && operator == OpEq {
 				operator = OpContains
 			}
+			if strings.Contains(f.Field(), ".") {
+				if err := ValidateJSONPathField(f.Field()); err != nil {
+					return nil, err
+				}
+			}
 			rule, ok := p.Fields[f.Field()]
 			if !ok || !supportedPolicyOperator(operator) || !containsOperator(rule.Operators, operator) ||
 				(f.Field() == "q" && operator != OpContains) ||

@@ -478,6 +478,12 @@ func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, erro
 		return NewCompoundClause(filter.LogicalOr, clauses), nil
 	}
 
+	if strings.Contains(f.Field(), ".") {
+		if err := filter.ValidateJSONPathField(f.Field()); err != nil {
+			return nil, err
+		}
+	}
+
 	// Check if this is a JSON path field (contains dot notation and the leading
 	// identifier does not name a table/alias present in the query).
 	if b.isJSONPath(f.Field()) {
