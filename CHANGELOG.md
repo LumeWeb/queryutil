@@ -1,3 +1,15 @@
+## 0.3.27 (2026-11-10)
+
+### Features
+
+- cap filter tree width
+
+### Fixes
+
+- reject malformed JSON path bytes
+- reject DEL in JSON path fields
+- isolate node budgets per parse
+
 ## 0.3.26 (2026-11-10)
 
 ### Fixes
