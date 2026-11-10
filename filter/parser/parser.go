@@ -46,6 +46,7 @@ type ParserOptions struct {
 	InputFormat    InputFormat                // Preferred input format (JSON or query params)
 	StringFields   []string                   // Query-parameter fields whose values remain strings
 	RawQueryValues bool                       // url.Values are already URL-decoded; do not decode text again
+	MaxFilterNodes int                        // Zero means unlimited filter width.
 }
 
 // DefaultParserOptions returns the default parser configuration:
@@ -76,6 +77,18 @@ func WithStringFields(fields ...string) ParserOption {
 // requests; the default preserves legacy parsing of pre-escaped values.
 func WithRawQueryValues() ParserOption {
 	return func(o *ParserOptions) { o.RawQueryValues = true }
+}
+
+// WithMaxFilterNodes rejects filter trees wider than max, counting groups and
+// leaves. Query-parameter parsing also caps the number of filter parameters
+// before building its nested map. Multiple options use the strictest positive
+// limit. Zero means no additional limit; negative limits are invalid.
+func WithMaxFilterNodes(max int) ParserOption {
+	return func(o *ParserOptions) {
+		if max < 0 || o.MaxFilterNodes == 0 || (max > 0 && max < o.MaxFilterNodes) {
+			o.MaxFilterNodes = max
+		}
+	}
 }
 
 // WithInputFormat specifies the input format to parse from (JSON or query params)

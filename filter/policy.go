@@ -23,14 +23,21 @@ type FieldRule struct {
 // Fields and SortFields must be explicitly populated; empty lists allow nothing.
 // Do not mutate a policy's maps or slices while it is in use.
 type QueryPolicy struct {
-	Fields     map[string]FieldRule
-	SortFields []string
+	Fields         map[string]FieldRule
+	SortFields     []string
+	MaxFilterNodes int // Zero preserves the legacy unlimited width.
 }
 
 // Normalize validates the entire filter tree and sorts and returns a new tree.
 // It accepts only built-in filter nodes so custom visitors cannot bypass checks.
 // Original filters are not modified. An error means no query should be built.
 func (p QueryPolicy) Normalize(filters []CrudFilter, sorts []Sort) ([]CrudFilter, error) {
+	// Check the entire tree before invoking any application converters.
+	if p.MaxFilterNodes != 0 {
+		if err := ValidateFilterNodeLimit(filters, p.MaxFilterNodes); err != nil {
+			return nil, err
+		}
+	}
 	for _, s := range sorts {
 		if !containsField(p.SortFields, s.Field) || (s.Order != OrderAsc && s.Order != OrderDesc) {
 			return nil, fmt.Errorf("%w: sort %q %q", ErrInvalidQuery, s.Field, s.Order)
