@@ -3,6 +3,7 @@ package queryutil
 import (
 	"fmt"
 	"go.lumeweb.com/queryutil/filter"
+	"go.lumeweb.com/queryutil/filter/builder"
 	"go.lumeweb.com/queryutil/filter/parser"
 	"golang.org/x/exp/constraints"
 )
@@ -12,6 +13,8 @@ type (
 	// RequestParser re-exports the parser.Parser interface
 	RequestParser      = parser.Parser
 	ParserOption       = parser.ParserOption
+	GORMOption         = builder.GORMOption
+	FieldPredicate     = builder.FieldPredicate
 	Sort               = filter.Sort
 	SortConfig         = filter.SortConfig
 	QueryPolicy        = filter.QueryPolicy
@@ -78,6 +81,8 @@ var (
 	OperatorMap          = filter.OperatorMap
 	ErrInvalidQuery      = filter.ErrInvalidQuery
 	WithStringFields     = parser.WithStringFields
+	WithRawQueryValues   = parser.WithRawQueryValues
+	WithFieldPredicate   = builder.WithFieldPredicate
 	AllScalarFieldRules  = filter.AllScalarFieldRules
 	ScalarOperators      = filter.ScalarOperators
 	ComparableOperators  = filter.ComparableOperators

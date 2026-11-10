@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+
 	"go.lumeweb.com/queryutil/filter"
 )
 
@@ -32,10 +33,15 @@ func NewJSONParser(input string, opts ...ParserOption) *JSONParser {
 // - Logical filters: {"field", "operator", "value"}
 // - Conditional filters: {"operator": "and/or/not", "value": [nested filters]}
 // Returns parsed filters or validation error if JSON is malformed
-func (p *JSONParser) ParseFilters() ([]filter.CrudFilter, error) {
+func (p *JSONParser) ParseFilters() (filters []filter.CrudFilter, err error) {
+	defer func() {
+		if err != nil {
+			filters = nil
+			err = fmt.Errorf("%w: %w", filter.ErrInvalidQuery, err)
+		}
+	}()
 	rawJSON := p.input
 
-	var filters []filter.CrudFilter
 	var rawFilters []json.RawMessage
 	// First parse into raw messages to preserve nested structure
 	if err := json.Unmarshal([]byte(rawJSON), &rawFilters); err != nil {
@@ -61,8 +67,6 @@ func (p *JSONParser) ParseFilters() ([]filter.CrudFilter, error) {
 
 	return filters, nil
 }
-
-
 
 func parseFilterFromRaw(rf json.RawMessage) (filter.CrudFilter, error) {
 	var raw map[string]any
@@ -131,21 +135,7 @@ func parseFilterFromRaw(rf json.RawMessage) (filter.CrudFilter, error) {
 			return nil, filter.NewFilterError("operator", err.Error())
 		}
 
-		var lf filter.CrudFilter
-		defer func() {
-			if r := recover(); r != nil {
-				err = filter.NewFilterError(fieldStr, fmt.Sprintf("value validation failed for operator '%s': %v", opStr, r))
-				lf = nil
-			}
-		}()
-
-		lf = filter.NewLogicalFilter(fieldStr, op, valueVal)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return lf, nil
+		return filter.NewLogicalFilterChecked(fieldStr, op, valueVal)
 	}
 
 	return nil, filter.NewFilterError("", fmt.Sprintf("invalid filter structure: %v", string(rf)))

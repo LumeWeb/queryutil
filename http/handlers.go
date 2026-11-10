@@ -3,10 +3,12 @@ package http
 import (
 	"errors"
 	"fmt"
+	"net/http"
+
 	"go.lumeweb.com/queryutil"
 	"go.lumeweb.com/queryutil/filter"
+	"go.lumeweb.com/queryutil/filter/parser"
 	"gorm.io/gorm"
-	"net/http"
 )
 
 // ProcessListRequest handles the common pattern for list endpoints.
@@ -82,16 +84,51 @@ func ProcessListRequest[T any, D any](
 		opt(options)
 	}
 
-	parser := queryutil.NewHTTPRequestParser(r, options.SearchConfig, options.SortConfig)
-	filters, sorts, pagination, err := queryutil.ParseFromSource(parser)
+	requestParser := queryutil.NewHTTPRequestParser(r, options.SearchConfig, options.SortConfig)
+	return processListRequest(w, entityName, service, converter, requestParser, nil)
+}
+
+// ProcessListRequestWithPolicy validates untrusted list queries before calling
+// the service. Parser options such as WithStringFields are applied to the HTTP
+// request; url.Values are decoded only once. The policy's Convert callbacks
+// run here. A service that normalizes the same filters again must use converters
+// that also accept already-converted values (or validate without converting).
+// Ownership restrictions remain the service's responsibility.
+func ProcessListRequestWithPolicy[T any, D any](
+	w http.ResponseWriter, r *http.Request, entityName string,
+	policy queryutil.QueryPolicy, service queryutil.EntityFunc[T], converter func(T) D,
+	parserOptions ...queryutil.ParserOption,
+) error {
+	opts := append(append([]parser.ParserOption(nil), parserOptions...), parser.WithRawQueryValues())
+	requestParser := queryutil.NewHTTPRequestParser(r, nil, nil, opts...)
+	return processListRequest(w, entityName, service, converter, requestParser, &policy)
+}
+
+func processListRequest[T any, D any](
+	w http.ResponseWriter, entityName string, service queryutil.EntityFunc[T], converter func(T) D,
+	requestParser *queryutil.HTTPRequestParser, policy *queryutil.QueryPolicy,
+) error {
+	filters, sorts, pagination, err := queryutil.ParseFromSource(requestParser)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid query parameters: %v", err), http.StatusBadRequest)
 		return err
 	}
 
+	if policy != nil {
+		filters, err = policy.Normalize(filters, sorts)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid query parameters: %v", err), http.StatusBadRequest)
+			return err
+		}
+	}
+
 	// Get data from service
 	items, total, err := service(filters, sorts, pagination)
 	if err != nil {
+		if policy != nil && errors.Is(err, filter.ErrInvalidQuery) {
+			http.Error(w, "Invalid query parameters", http.StatusBadRequest)
+			return err
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			http.Error(w, fmt.Sprintf("Entity %s not found", entityName), http.StatusNotFound)
 			return err

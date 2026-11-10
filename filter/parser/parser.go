@@ -41,10 +41,11 @@ func ApplyParserOptions(opts []ParserOption) *ParserOptions {
 
 // ParserOptions contains configuration for parsing behavior
 type ParserOptions struct {
-	SearchConfig *filter.GlobalSearchConfig // Configuration for global search parameters
-	SortConfig   *filter.SortConfig         // Valid sort fields configuration
-	InputFormat  InputFormat                // Preferred input format (JSON or query params)
-	StringFields []string                   // Query-parameter fields whose values remain strings
+	SearchConfig   *filter.GlobalSearchConfig // Configuration for global search parameters
+	SortConfig     *filter.SortConfig         // Valid sort fields configuration
+	InputFormat    InputFormat                // Preferred input format (JSON or query params)
+	StringFields   []string                   // Query-parameter fields whose values remain strings
+	RawQueryValues bool                       // url.Values are already URL-decoded; do not decode text again
 }
 
 // DefaultParserOptions returns the default parser configuration:
@@ -69,6 +70,12 @@ func WithStringFields(fields ...string) ParserOption {
 	return func(o *ParserOptions) {
 		o.StringFields = append([]string(nil), fields...)
 	}
+}
+
+// WithRawQueryValues treats url.Values as already URL-decoded. Use for HTTP
+// requests; the default preserves legacy parsing of pre-escaped values.
+func WithRawQueryValues() ParserOption {
+	return func(o *ParserOptions) { o.RawQueryValues = true }
 }
 
 // WithInputFormat specifies the input format to parse from (JSON or query params)

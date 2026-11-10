@@ -87,7 +87,7 @@ func (p QueryPolicy) normalize(filters []CrudFilter, depth int) ([]CrudFilter, e
 			}
 			// The constructor validates values by panicking; contain that legacy API
 			// at this boundary so direct callers receive an error instead.
-			node, err := checkedLogicalFilter(f.Field(), operator, value)
+			node, err := NewLogicalFilterChecked(f.Field(), operator, value)
 			if err != nil {
 				return nil, err
 			}
@@ -111,7 +111,9 @@ func (p QueryPolicy) normalize(filters []CrudFilter, depth int) ([]CrudFilter, e
 	return result, nil
 }
 
-func checkedLogicalFilter(field string, op Operator, value any) (node *LogicalFilter, err error) {
+// NewLogicalFilterChecked adapts the legacy panic-based constructor for
+// untrusted operands. It returns ErrInvalidQuery on validation failures.
+func NewLogicalFilterChecked(field string, op Operator, value any) (node *LogicalFilter, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			node = nil

@@ -187,6 +187,7 @@ var dialectCache sync.Map // map[*sql.DB]string
 type GORMBuilder struct {
 	baseTx       *gorm.DB // The original DB connection/transaction
 	searchConfig *filter.GlobalSearchConfig
+	predicates   map[string]FieldPredicate
 
 	// dialectOnce memoizes the resolved MySQL dialect per builder instance. This
 	// covers transaction pools (*sql.Tx) and prepared-statement wrappers
@@ -201,11 +202,37 @@ type GORMBuilder struct {
 	knownTables map[string]struct{}
 }
 
-func NewGORMBuilder(baseTx *gorm.DB, searchConfig *filter.GlobalSearchConfig) *GORMBuilder {
-	return &GORMBuilder{
-		baseTx:       baseTx,
-		searchConfig: searchConfig,
+// FieldPredicate is trusted application SQL for a registered field. Values must
+// be returned as bound arguments, never interpolated into the SQL fragment.
+// The application remains responsible for the field/operator allowlist in its
+// QueryPolicy, which must normalize untrusted filters before Apply.
+type FieldPredicate func(operator filter.Operator, value any) (sql string, args []any, err error)
+
+type GORMOption func(*GORMBuilder)
+
+// WithFieldPredicate registers a field-specific predicate. The builder composes
+// it inside the same AND/OR/NOT tree as built-in fields.
+func WithFieldPredicate(field string, predicate FieldPredicate) GORMOption {
+	return func(b *GORMBuilder) {
+		if b.predicates == nil {
+			b.predicates = make(map[string]FieldPredicate)
+		}
+		b.predicates[field] = predicate
 	}
+}
+
+func NewGORMBuilder(baseTx *gorm.DB, searchConfig *filter.GlobalSearchConfig) *GORMBuilder {
+	return NewGORMBuilderWithOptions(baseTx, searchConfig)
+}
+
+// NewGORMBuilderWithOptions adds application predicates without changing the
+// legacy constructor's signature or behavior.
+func NewGORMBuilderWithOptions(baseTx *gorm.DB, searchConfig *filter.GlobalSearchConfig, opts ...GORMOption) *GORMBuilder {
+	b := &GORMBuilder{baseTx: baseTx, searchConfig: searchConfig}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b
 }
 
 // dialectName returns the effective database dialect for this builder's
@@ -417,6 +444,20 @@ func (b *GORMBuilder) buildClauseCondition(clause filter.Clause) (*gorm.DB, erro
 }
 
 func (b *GORMBuilder) VisitLogical(f *filter.LogicalFilter) (filter.Clause, error) {
+	if predicate, ok := b.predicates[f.Field()]; ok {
+		if predicate == nil {
+			return nil, fmt.Errorf("nil predicate for field %q", f.Field())
+		}
+		sql, args, err := predicate(f.Operator(), f.Value())
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(sql) == "" {
+			return nil, fmt.Errorf("empty predicate for field %q", f.Field())
+		}
+		condition := b.baseTx.Session(&gorm.Session{NewDB: true}).Where(sql, args...)
+		return NewGormConditionClause(condition, f.Field()), nil
+	}
 	if f.Field() == "q" {
 		// Global search 'q' field translates to an OR clause across searchable columns
 		if b.searchConfig == nil || len(b.searchConfig.SearchableColumns) == 0 {
