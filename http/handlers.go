@@ -94,7 +94,9 @@ func ProcessListRequest[T any, D any](
 // request; url.Values are decoded only once. The policy's Convert callbacks
 // run here. A service that normalizes the same filters again must use converters
 // that also accept already-converted values (or validate without converting).
-// Ownership restrictions remain the service's responsibility.
+// Ownership restrictions remain the service's responsibility. Unexpected
+// service errors produce a generic HTTP 500 body; the original error is returned
+// unchanged so callers can log it outside the response.
 func ProcessListRequestWithPolicy[T any, D any](
 	w http.ResponseWriter, r *http.Request, entityName string,
 	policy queryutil.QueryPolicy, service queryutil.EntityFunc[T], converter func(T) D,
@@ -139,6 +141,10 @@ func processListRequest[T any, D any](
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			http.Error(w, fmt.Sprintf("Entity %s not found", entityName), http.StatusNotFound)
+			return err
+		}
+		if policy != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return err
 		}
 		http.Error(w, fmt.Sprintf("Failed to list %s: %v", entityName, err), http.StatusInternalServerError)
