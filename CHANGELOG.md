@@ -1,3 +1,9 @@
+## 0.3.26 (2026-11-10)
+
+### Fixes
+
+- hide policy list server errors
+
 ## 0.3.25 (2026-11-10)
 
 ### Features
