@@ -1,8 +1,10 @@
 package builder
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"go.lumeweb.com/queryutil/filter"
 	"gorm.io/driver/sqlite"
@@ -14,6 +16,9 @@ func TestCustomFieldPredicateComposesWithScopeAndBooleanGroups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db = db.WithContext(ctx)
 	for _, sql := range []string{
 		"CREATE TABLE ipfs_websites (id integer PRIMARY KEY, user_id integer, name text)",
 		"CREATE TABLE website_domains (website_id integer, domain text, deleted_at datetime)",
@@ -77,6 +82,9 @@ func TestCustomPredicateErrorsAbortQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db = db.WithContext(ctx)
 	expected := errors.New("bad domain")
 	b := NewGORMBuilderWithOptions(db, nil, WithFieldPredicate("domain", func(filter.Operator, any) (string, []any, error) { return "", nil, expected }))
 	_, err = b.Apply(db, []filter.CrudFilter{filter.NewLogicalFilter("domain", filter.OpEq, "x")})

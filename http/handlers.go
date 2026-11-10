@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"go.lumeweb.com/queryutil"
 	"go.lumeweb.com/queryutil/filter"
@@ -99,6 +100,13 @@ func ProcessListRequestWithPolicy[T any, D any](
 	policy queryutil.QueryPolicy, service queryutil.EntityFunc[T], converter func(T) D,
 	parserOptions ...queryutil.ParserOption,
 ) error {
+	// URL.Query silently drops malformed key/value pairs. Reject the whole
+	// request before any missing filters could reach the service.
+	if _, err := url.ParseQuery(r.URL.RawQuery); err != nil {
+		invalid := fmt.Errorf("%w: invalid query encoding: %v", filter.ErrInvalidQuery, err)
+		http.Error(w, "Invalid query parameters", http.StatusBadRequest)
+		return invalid
+	}
 	opts := append(append([]parser.ParserOption(nil), parserOptions...), parser.WithRawQueryValues())
 	requestParser := queryutil.NewHTTPRequestParser(r, nil, nil, opts...)
 	return processListRequest(w, entityName, service, converter, requestParser, &policy)
