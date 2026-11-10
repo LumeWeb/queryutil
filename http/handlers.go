@@ -110,6 +110,9 @@ func ProcessListRequestWithPolicy[T any, D any](
 		return invalid
 	}
 	opts := append(append([]parser.ParserOption(nil), parserOptions...), parser.WithRawQueryValues())
+	if policy.MaxFilterNodes != 0 {
+		opts = append(opts, parser.WithMaxFilterNodes(policy.MaxFilterNodes))
+	}
 	requestParser := queryutil.NewHTTPRequestParser(r, nil, nil, opts...)
 	return processListRequest(w, entityName, service, converter, requestParser, &policy)
 }

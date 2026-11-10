@@ -13,6 +13,7 @@ import (
 type JSONParser struct {
 	input  string         // Raw JSON input to parse
 	config *ParserOptions // Parser configuration
+	nodes  int            // Filter nodes built in the current ParseFilters call
 }
 
 // NewJSONParser creates a new parser instance for JSON input.
@@ -34,12 +35,16 @@ func NewJSONParser(input string, opts ...ParserOption) *JSONParser {
 // - Conditional filters: {"operator": "and/or/not", "value": [nested filters]}
 // Returns parsed filters or validation error if JSON is malformed
 func (p *JSONParser) ParseFilters() (filters []filter.CrudFilter, err error) {
+	p.nodes = 0
 	defer func() {
 		if err != nil {
 			filters = nil
 			err = fmt.Errorf("%w: %w", filter.ErrInvalidQuery, err)
 		}
 	}()
+	if p.config.MaxFilterNodes < 0 {
+		return nil, fmt.Errorf("%w: negative filter node limit", filter.ErrInvalidQuery)
+	}
 	rawJSON := p.input
 
 	var rawFilters []json.RawMessage
@@ -58,7 +63,7 @@ func (p *JSONParser) ParseFilters() (filters []filter.CrudFilter, err error) {
 
 	for _, rf := range rawFilters {
 		// Delegate parsing each top-level raw message to the helper function
-		f, err := parseFilterFromRaw(rf)
+		f, err := p.parseFilterFromRaw(rf)
 		if err != nil {
 			return nil, err // Propagate parsing errors
 		}
@@ -68,7 +73,10 @@ func (p *JSONParser) ParseFilters() (filters []filter.CrudFilter, err error) {
 	return filters, nil
 }
 
-func parseFilterFromRaw(rf json.RawMessage) (filter.CrudFilter, error) {
+func (p *JSONParser) parseFilterFromRaw(rf json.RawMessage) (filter.CrudFilter, error) {
+	if err := countFilterNode(&p.nodes, p.config.MaxFilterNodes); err != nil {
+		return nil, err
+	}
 	var raw map[string]any
 	if err := json.Unmarshal(rf, &raw); err != nil {
 		return nil, filter.NewFilterError("", fmt.Sprintf("invalid JSON object structure: %v", err))
@@ -110,7 +118,7 @@ func parseFilterFromRaw(rf json.RawMessage) (filter.CrudFilter, error) {
 			if err != nil {
 				return nil, filter.NewFilterError("", fmt.Sprintf("internal error: failed to re-marshal nested filter: %v", err))
 			}
-			nf, err := parseFilterFromRaw(nestedRF)
+			nf, err := p.parseFilterFromRaw(nestedRF)
 			if err != nil {
 				return nil, err
 			}

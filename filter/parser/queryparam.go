@@ -44,6 +44,7 @@ const (
 type QueryParamParser struct {
 	query  url.Values     // Source query parameters
 	config *ParserOptions // Parser configuration
+	nodes  int            // Filter nodes built in the current ParseFilters call
 }
 
 // NewQueryParamParser creates a new parser instance for URL query parameters.
@@ -71,12 +72,16 @@ func (p *QueryParamParser) ParseSorts(config *filter.SortConfig) ([]filter.Sort,
 // Example: filters[or][0][age][gte]=30&filters[or][1][name][contains]=john
 // Returns combined filters or validation error if parameters are malformed
 func (p *QueryParamParser) ParseFilters() (filters []filter.CrudFilter, err error) {
+	p.nodes = 0
 	defer func() {
 		if err != nil {
 			filters = nil
 			err = fmt.Errorf("%w: %w", filter.ErrInvalidQuery, err)
 		}
 	}()
+	if p.config.MaxFilterNodes < 0 {
+		return nil, fmt.Errorf("%w: negative filter node limit", filter.ErrInvalidQuery)
+	}
 	filterMap := make(map[string]any)
 
 	// Build filter structure from query parameters
@@ -201,6 +206,9 @@ func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, 
 }
 
 func (p *QueryParamParser) buildConditionalFilter(operator string, value any) ([]filter.CrudFilter, error) {
+	if err := countFilterNode(&p.nodes, p.config.MaxFilterNodes); err != nil {
+		return nil, err
+	}
 	var nestedFilters []filter.CrudFilter
 
 	// Handle both array and single map values for nested conditionals
@@ -359,6 +367,9 @@ func isNumericType(val any) (isNumeric bool, typeName string) {
 // - Array values for IN/NIN/BETWEEN operators
 // Returns formatted LogicalFilter or error if validation fails
 func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.CrudFilter, error) {
+	if err := countFilterNode(&p.nodes, p.config.MaxFilterNodes); err != nil {
+		return nil, err
+	}
 	if field == "" {
 		return nil, fmt.Errorf("field name cannot be empty")
 	}

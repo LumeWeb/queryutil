@@ -78,15 +78,17 @@ const (
 
 // Re-exported variables
 var (
-	OperatorMap          = filter.OperatorMap
-	ErrInvalidQuery      = filter.ErrInvalidQuery
-	WithStringFields     = parser.WithStringFields
-	WithRawQueryValues   = parser.WithRawQueryValues
-	WithFieldPredicate   = builder.WithFieldPredicate
-	AllScalarFieldRules  = filter.AllScalarFieldRules
-	ScalarOperators      = filter.ScalarOperators
-	ComparableOperators  = filter.ComparableOperators
-	ComparableFieldRules = filter.ComparableFieldRules
+	OperatorMap             = filter.OperatorMap
+	ErrInvalidQuery         = filter.ErrInvalidQuery
+	WithStringFields        = parser.WithStringFields
+	WithMaxFilterNodes      = parser.WithMaxFilterNodes
+	WithRawQueryValues      = parser.WithRawQueryValues
+	WithFieldPredicate      = builder.WithFieldPredicate
+	AllScalarFieldRules     = filter.AllScalarFieldRules
+	ScalarOperators         = filter.ScalarOperators
+	ComparableOperators     = filter.ComparableOperators
+	ComparableFieldRules    = filter.ComparableFieldRules
+	ValidateFilterNodeLimit = filter.ValidateFilterNodeLimit
 )
 
 // QueryBuilder defines the interface for building query clauses
