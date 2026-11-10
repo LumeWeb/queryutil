@@ -64,7 +64,9 @@ func (g *queryGenerator) processFilters(filters []filter.CrudFilter, path []stri
 func (g *queryGenerator) processLogicalFilter(f *filter.LogicalFilter, path []string) error {
 	// Handle global search (q) specially
 	if f.Field() == "q" {
-		g.query["q"] = []string{url.QueryEscape(fmt.Sprint(f.Value()))}
+		// The parser preserves q verbatim, so emit its raw text. Callers using
+		// url.Values.Encode will escape it for the wire.
+		g.query["q"] = []string{fmt.Sprint(f.Value())}
 		return nil
 	}
 
