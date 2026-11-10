@@ -44,7 +44,6 @@ const (
 type QueryParamParser struct {
 	query  url.Values     // Source query parameters
 	config *ParserOptions // Parser configuration
-	nodes  int            // Filter nodes built in the current ParseFilters call
 }
 
 // NewQueryParamParser creates a new parser instance for URL query parameters.
@@ -72,7 +71,7 @@ func (p *QueryParamParser) ParseSorts(config *filter.SortConfig) ([]filter.Sort,
 // Example: filters[or][0][age][gte]=30&filters[or][1][name][contains]=john
 // Returns combined filters or validation error if parameters are malformed
 func (p *QueryParamParser) ParseFilters() (filters []filter.CrudFilter, err error) {
-	p.nodes = 0
+	nodes := 0
 	defer func() {
 		if err != nil {
 			filters = nil
@@ -83,6 +82,7 @@ func (p *QueryParamParser) ParseFilters() (filters []filter.CrudFilter, err erro
 		return nil, fmt.Errorf("%w: negative filter node limit", filter.ErrInvalidQuery)
 	}
 	filterMap := make(map[string]any)
+	parameterCount := 0
 
 	// Build filter structure from query parameters
 	for key, values := range p.query {
@@ -116,6 +116,11 @@ func (p *QueryParamParser) ParseFilters() (filters []filter.CrudFilter, err erro
 			continue
 		}
 
+		// Bound map construction and key sorting, not just the final filter tree.
+		parameterCount++
+		if p.config.MaxFilterNodes > 0 && parameterCount > p.config.MaxFilterNodes {
+			return nil, fmt.Errorf("%w: too many filter parameters", filter.ErrInvalidQuery)
+		}
 		currentNestedMap := filterMap
 		for _, segment := range segments[:len(segments)-1] {
 			if _, ok := currentNestedMap[segment]; !ok {
@@ -139,7 +144,7 @@ func (p *QueryParamParser) ParseFilters() (filters []filter.CrudFilter, err erro
 		currentNestedMap[finalKey] = values
 	}
 
-	return p.buildFilters(filterMap)
+	return p.buildFilters(filterMap, &nodes)
 }
 
 var segmentRegex = regexp.MustCompile(`\[(.*?)\]`) // Matches content inside brackets
@@ -162,18 +167,18 @@ func parseSegments(path string) []string {
 	return result
 }
 
-func (p *QueryParamParser) buildFilters(data any) ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) buildFilters(data any, nodes *int) ([]filter.CrudFilter, error) {
 	switch v := data.(type) {
 	case map[string]any:
-		return p.buildFromMap(v)
+		return p.buildFromMap(v, nodes)
 	case []any:
-		return p.buildFromSlice(v)
+		return p.buildFromSlice(v, nodes)
 	default:
 		return nil, fmt.Errorf("unexpected filter structure type: %T", data)
 	}
 }
 
-func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) buildFromMap(m map[string]any, nodes *int) ([]filter.CrudFilter, error) {
 	var filters []filter.CrudFilter
 
 	// Sort keys for deterministic output; Go map iteration order is randomized.
@@ -188,13 +193,13 @@ func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, 
 		switch key {
 		case "and", "or", "not":
 			// Handle nested conditional filters that might be wrapped in arrays
-			conditionalFilters, err := p.buildConditionalFilter(key, value)
+			conditionalFilters, err := p.buildConditionalFilter(key, value, nodes)
 			if err != nil {
 				return nil, err
 			}
 			filters = append(filters, conditionalFilters...)
 		default:
-			logicalFilter, err := p.buildLogicalFilter(key, value)
+			logicalFilter, err := p.buildLogicalFilter(key, value, nodes)
 			if err != nil {
 				return nil, err
 			}
@@ -205,8 +210,8 @@ func (p *QueryParamParser) buildFromMap(m map[string]any) ([]filter.CrudFilter, 
 	return filters, nil
 }
 
-func (p *QueryParamParser) buildConditionalFilter(operator string, value any) ([]filter.CrudFilter, error) {
-	if err := countFilterNode(&p.nodes, p.config.MaxFilterNodes); err != nil {
+func (p *QueryParamParser) buildConditionalFilter(operator string, value any, nodes *int) ([]filter.CrudFilter, error) {
+	if err := countFilterNode(nodes, p.config.MaxFilterNodes); err != nil {
 		return nil, err
 	}
 	var nestedFilters []filter.CrudFilter
@@ -214,7 +219,7 @@ func (p *QueryParamParser) buildConditionalFilter(operator string, value any) ([
 	// Handle both array and single map values for nested conditionals
 	if arr, ok := value.([]any); ok {
 		for _, item := range arr {
-			filters, err := p.buildFilters(item)
+			filters, err := p.buildFilters(item, nodes)
 			if err != nil {
 				return nil, err
 			}
@@ -237,7 +242,7 @@ func (p *QueryParamParser) buildConditionalFilter(operator string, value any) ([
 
 		for _, kInt := range intKeys {
 			item := m[strconv.Itoa(kInt)]
-			filters, err := p.buildFilters(item)
+			filters, err := p.buildFilters(item, nodes)
 			if err != nil {
 				return nil, err
 			}
@@ -366,8 +371,8 @@ func isNumericType(val any) (isNumeric bool, typeName string) {
 // - Boolean values (strict "true"/"false" only)
 // - Array values for IN/NIN/BETWEEN operators
 // Returns formatted LogicalFilter or error if validation fails
-func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.CrudFilter, error) {
-	if err := countFilterNode(&p.nodes, p.config.MaxFilterNodes); err != nil {
+func (p *QueryParamParser) buildLogicalFilter(field string, value any, nodes *int) (filter.CrudFilter, error) {
+	if err := countFilterNode(nodes, p.config.MaxFilterNodes); err != nil {
 		return nil, err
 	}
 	if field == "" {
@@ -545,18 +550,18 @@ func (p *QueryParamParser) ParsePagination() (filter.Pagination, error) {
 	return filter.ParseQueryPagination(p.query)
 }
 
-func (p *QueryParamParser) buildFromSlice(s []any) ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) buildFromSlice(s []any, nodes *int) ([]filter.CrudFilter, error) {
 	var filters []filter.CrudFilter
 
 	for _, item := range s {
 		if m, ok := item.(map[string]any); ok {
-			subFilters, err := p.buildFromMap(m)
+			subFilters, err := p.buildFromMap(m, nodes)
 			if err != nil {
 				return nil, err
 			}
 			filters = append(filters, subFilters...)
 		} else if arr, ok := item.([]any); ok {
-			subFilters, err := p.buildFromSlice(arr)
+			subFilters, err := p.buildFromSlice(arr, nodes)
 			if err != nil {
 				return nil, err
 			}

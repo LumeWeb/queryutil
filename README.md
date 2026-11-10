@@ -153,7 +153,10 @@ limit. Groups and leaves both count, and `Normalize` checks the budget before
 running converters. `ProcessListRequestWithPolicy` applies the same limit while
 parsing, before the service runs. Direct query-parameter and JSON parsing can
 use `WithMaxFilterNodes(limit)`; the strictest positive parser option wins.
-When an application must inspect filters to build a dynamic policy, call
+Query-parameter parsing also rejects more than `limit` filter parameters before
+building its nested map. This limits filter work after input decoding, not the
+size of the incoming HTTP request. When an application must inspect filters to
+build a dynamic policy, call
 `queryutil.ValidateFilterNodeLimit(filters, limit)` before that inspection and
 set the same limit on the resulting policy. Zero keeps the legacy unlimited
 width. The existing nesting-depth and pagination limits are unchanged.

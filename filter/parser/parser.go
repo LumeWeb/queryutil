@@ -80,8 +80,9 @@ func WithRawQueryValues() ParserOption {
 }
 
 // WithMaxFilterNodes rejects filter trees wider than max, counting groups and
-// leaves. Multiple options use the strictest positive limit. Zero means no
-// additional limit; negative limits are invalid.
+// leaves. Query-parameter parsing also caps the number of filter parameters
+// before building its nested map. Multiple options use the strictest positive
+// limit. Zero means no additional limit; negative limits are invalid.
 func WithMaxFilterNodes(max int) ParserOption {
 	return func(o *ParserOptions) {
 		if max < 0 || o.MaxFilterNodes == 0 || (max > 0 && max < o.MaxFilterNodes) {
