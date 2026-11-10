@@ -14,7 +14,7 @@ func TestJSONPathRejectsInvalidBytesBeforeDatabaseExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"meta.a\x00b", "meta.\xff", "meta.a\nb"} {
+	for _, field := range []string{"meta.a\x00b", "meta.\xff", "meta.a\nb", "meta.a\x7fb"} {
 		_, err := NewGORMBuilder(db, nil).Apply(db, []filter.CrudFilter{filter.NewLogicalFilter(field, filter.OpEq, "v")})
 		if !errors.Is(err, filter.ErrInvalidQuery) {
 			t.Errorf("field %q: got %v", field, err)

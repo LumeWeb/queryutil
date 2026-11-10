@@ -8,7 +8,7 @@ import (
 )
 
 func TestPolicyRejectsInvalidJSONPathBytesButAllowsEmptyKeys(t *testing.T) {
-	for _, field := range []string{"meta.a\x00b", "meta.\xff", "meta.a\nb"} {
+	for _, field := range []string{"meta.a\x00b", "meta.\xff", "meta.a\nb", "meta.a\x7fb"} {
 		policy := filter.QueryPolicy{Fields: map[string]filter.FieldRule{field: {Operators: []filter.Operator{filter.OpEq}}}}
 		_, err := policy.Normalize([]filter.CrudFilter{filter.NewLogicalFilter(field, filter.OpEq, "value")}, nil)
 		if !errors.Is(err, filter.ErrInvalidQuery) {
