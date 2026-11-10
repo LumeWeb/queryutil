@@ -1,3 +1,13 @@
+## 0.3.24 (2026-11-10)
+
+### Fixes
+
+- propagate filter builder errors to GORM
+- normalize q equality as contains
+- avoid poisoning shared GORM handles
+- preserve search query text
+- keep search terms raw
+
 ## 0.3.23 (2026-11-09)
 
 ### Features
