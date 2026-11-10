@@ -59,7 +59,6 @@ func TestPolicyRejectsOperatorsBuilderCannotApply(t *testing.T) {
 		{"json not in", filter.NewLogicalFilter("metadata.status", filter.OpNin, []any{"active"})},
 		{"json between", filter.NewLogicalFilter("metadata.status", filter.OpBetween, []any{1, 2})},
 		{"json not between", filter.NewLogicalFilter("metadata.status", filter.OpNbetween, []any{1, 2})},
-		{"q eq", filter.NewLogicalFilter("q", filter.OpEq, "active")},
 		{"q ne", filter.NewLogicalFilter("q", filter.OpNe, "active")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

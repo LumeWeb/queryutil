@@ -107,9 +107,10 @@ if err != nil {
 ```
 
 The option also applies to nested filters and array values. It does not change
-other fields or JSON input. Numeric comparison and range operators on a
-string-preserved field return an error rather than coercing their values.
-For direct query-parameter parsing, pass the option
+other fields or JSON input. The reserved search field `q` always retains its
+query-parameter text, even without the option. Numeric comparison and range
+operators on a string-preserved field return an error rather than coercing their
+values. For direct query-parameter parsing, pass the option
 to `parser.NewQueryParamParser`; `NewHTTPRequestParser` accepts it as an
 optional fourth argument.
 
@@ -148,8 +149,9 @@ For equality, range, IN, and BETWEEN without pattern or null operators, use
 independent operator slices. Sort fields must still be declared separately.
 
 Configure permitted operators and sort fields explicitly. The special `q`
-field supports only `OpContains` (and needs a configured global search); dotted
-fields cannot use array or range operators because they may be JSON paths.
+field requires `OpContains` in the policy; `q[eq]` is accepted as an alias
+and normalized to `OpContains`. Search needs a configured global search;
+dotted fields cannot use array or range operators because they may be JSON paths.
 
 ### Individual Parameter Parsing
 

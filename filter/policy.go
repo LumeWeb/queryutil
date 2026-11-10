@@ -59,29 +59,35 @@ func (p QueryPolicy) normalize(filters []CrudFilter, depth int) ([]CrudFilter, e
 			if f == nil {
 				return nil, fmt.Errorf("%w: nil filter", ErrInvalidQuery)
 			}
+			operator := f.Operator()
+			// The search builder interprets q[eq] as a contains search. Normalize
+			// that legacy spelling before checking the policy's allowed operators.
+			if f.Field() == "q" && operator == OpEq {
+				operator = OpContains
+			}
 			rule, ok := p.Fields[f.Field()]
-			if !ok || !supportedPolicyOperator(f.Operator()) || !containsOperator(rule.Operators, f.Operator()) ||
-				(f.Field() == "q" && f.Operator() != OpContains) ||
-				(strings.Contains(f.Field(), ".") && unsupportedJSONOperator(f.Operator())) {
+			if !ok || !supportedPolicyOperator(operator) || !containsOperator(rule.Operators, operator) ||
+				(f.Field() == "q" && operator != OpContains) ||
+				(strings.Contains(f.Field(), ".") && unsupportedJSONOperator(operator)) {
 				return nil, fmt.Errorf("%w: field %q operator %q", ErrInvalidQuery, f.Field(), f.Operator())
 			}
 			value := f.Value()
 			if rule.Convert != nil {
 				var err error
-				value, err = rule.Convert(f.Operator(), value)
+				value, err = rule.Convert(operator, value)
 				if err != nil {
 					return nil, fmt.Errorf("%w: field %q: %v", ErrInvalidQuery, f.Field(), err)
 				}
 			}
-			if f.Operator().RequiresArray() {
+			if operator.RequiresArray() {
 				values, ok := value.([]any)
-				if !ok || len(values) == 0 || ((f.Operator() == OpBetween || f.Operator() == OpNbetween) && len(values) != 2) {
+				if !ok || len(values) == 0 || ((operator == OpBetween || operator == OpNbetween) && len(values) != 2) {
 					return nil, fmt.Errorf("%w: field %q: invalid array value", ErrInvalidQuery, f.Field())
 				}
 			}
 			// The constructor validates values by panicking; contain that legacy API
 			// at this boundary so direct callers receive an error instead.
-			node, err := checkedLogicalFilter(f.Field(), f.Operator(), value)
+			node, err := checkedLogicalFilter(f.Field(), operator, value)
 			if err != nil {
 				return nil, err
 			}
