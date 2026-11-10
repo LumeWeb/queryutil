@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"go.lumeweb.com/queryutil/filter"
 	"net/url"
 	"regexp"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	"go.lumeweb.com/queryutil/filter"
 )
 
 var invalidBoolStrings = []string{"t", "f", "yes", "no", "on", "off"}
@@ -70,7 +70,13 @@ func (p *QueryParamParser) ParseSorts(config *filter.SortConfig) ([]filter.Sort,
 // Supports nested AND/OR/NOT operators using bracket notation.
 // Example: filters[or][0][age][gte]=30&filters[or][1][name][contains]=john
 // Returns combined filters or validation error if parameters are malformed
-func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
+func (p *QueryParamParser) ParseFilters() (filters []filter.CrudFilter, err error) {
+	defer func() {
+		if err != nil {
+			filters = nil
+			err = fmt.Errorf("%w: %w", filter.ErrInvalidQuery, err)
+		}
+	}()
 	filterMap := make(map[string]any)
 
 	// Build filter structure from query parameters
@@ -128,8 +134,7 @@ func (p *QueryParamParser) ParseFilters() ([]filter.CrudFilter, error) {
 		currentNestedMap[finalKey] = values
 	}
 
-	filters, err := p.buildFilters(filterMap)
-	return filters, err
+	return p.buildFilters(filterMap)
 }
 
 var segmentRegex = regexp.MustCompile(`\[(.*?)\]`) // Matches content inside brackets
@@ -244,7 +249,10 @@ func (p *QueryParamParser) buildConditionalFilter(operator string, value any) ([
 	}}, nil
 }
 
-func convertStringValue(value any) (any, error) {
+func convertStringValue(value any) (any, error)   { return convertStringValueMode(value, true) }
+func convertRawQueryValue(value any) (any, error) { return convertStringValueMode(value, false) }
+
+func convertStringValueMode(value any, decode bool) (any, error) {
 	switch v := value.(type) {
 	case string:
 		if v == "" {
@@ -274,7 +282,10 @@ func convertStringValue(value any) (any, error) {
 			return nil, fmt.Errorf("invalid boolean value %q; use 'true' or 'false' (case-sensitive)", v)
 		}
 
-		// Decode any URL-encoded string value
+		if !decode {
+			return v, nil
+		}
+		// Legacy parser input may be pre-escaped; HTTP url.Values are not.
 		decoded, err := url.QueryUnescape(v)
 		if err != nil {
 			return v, nil // Return original if unescaping fails
@@ -287,7 +298,7 @@ func convertStringValue(value any) (any, error) {
 		}
 		var converted []any
 		for _, s := range v {
-			c, err := convertStringValue(s)
+			c, err := convertStringValueMode(s, decode)
 			if err != nil {
 				return nil, fmt.Errorf("error converting item '%s' in array: %w", s, err)
 			}
@@ -298,7 +309,7 @@ func convertStringValue(value any) (any, error) {
 	case []any:
 		var convertedInternal []any
 		for _, item := range v {
-			c, err := convertStringValue(item)
+			c, err := convertStringValueMode(item, decode)
 			if err != nil {
 				return nil, err
 			}
@@ -385,6 +396,9 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 	}
 
 	convert := convertStringValue
+	if p.config.RawQueryValues {
+		convert = convertRawQueryValue
+	}
 	// q is a search term, not a typed column value. Preserve its text even
 	// without an explicit option so numeric-looking terms keep leading zeros.
 	if field == "q" || lo.Contains(p.config.StringFields, field) {
@@ -513,7 +527,7 @@ func (p *QueryParamParser) buildLogicalFilter(field string, value any) (filter.C
 		}
 	}
 
-	return filter.NewLogicalFilter(field, operator, parsedVal), nil
+	return filter.NewLogicalFilterChecked(field, operator, parsedVal)
 }
 
 func (p *QueryParamParser) ParsePagination() (filter.Pagination, error) {

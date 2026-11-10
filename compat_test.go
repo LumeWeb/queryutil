@@ -70,6 +70,32 @@ func TestApplyFiltersErrorDoesNotPoisonInputDB(t *testing.T) {
 	}
 }
 
+func TestApplyFiltersWithOptionsUsesCustomPredicate(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&compatRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&compatRecord{ID: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	policy := queryutil.QueryPolicy{Fields: map[string]queryutil.FieldRule{"virtual": {Operators: []queryutil.Operator{queryutil.OpEq}}}}
+	filters, err := policy.Normalize([]queryutil.CrudFilter{queryutil.NewLogicalFilter("virtual", queryutil.OpEq, "1")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := queryutil.ApplyFiltersWithOptions(db.Model(&compatRecord{}), filters, nil,
+		queryutil.WithFieldPredicate("virtual", func(_ queryutil.Operator, value any) (string, []any, error) {
+			return "id = ?", []any{value}, nil
+		}))
+	var count int64
+	if err := query.Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("count=%d, err=%v", count, err)
+	}
+}
+
 func TestApplyFiltersStillExecutesValidQuery(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

@@ -153,6 +153,38 @@ field requires `OpContains` in the policy; `q[eq]` is accepted as an alias
 and normalized to `OpContains`. Search needs a configured global search;
 dotted fields cannot use array or range operators because they may be JSON paths.
 
+### Policy-aware HTTP lists
+
+`http.ProcessListRequestWithPolicy` is a separate entry point; the existing
+`ProcessListRequest` signature and behavior are unchanged. Supply a policy,
+the usual service and DTO converter, and parser options such as
+`queryutil.WithStringFields("external_id")`. It rejects malformed/unauthorized
+queries before calling the service and maps service `ErrInvalidQuery` to HTTP
+400. It retains the existing JSON response and `Content-Range` behavior.
+
+The policy-aware entry point reads already-decoded `r.URL.Query()` values and
+never unescapes text a second time. The legacy parser retains its original
+pre-escaped-value behavior; direct callers can use `parser.WithRawQueryValues()`
+for decoded `url.Values`. `FieldRule.Convert` runs during HTTP normalization;
+if the service checks the same policy again, converters must accept their own
+already-converted output (for example, a string-to-binary converter must also
+accept that binary type). Service entry points called without HTTP must still
+normalize their filters. Keep ownership constraints independent of client
+filters and apply them to the query separately.
+
+### Application-specific GORM predicates
+
+For a virtual field with no direct database column, register a trusted
+predicate with `queryutil.ApplyFiltersWithOptions(db, safeFilters, searchConfig,
+queryutil.WithFieldPredicate("domain", predicate))`, or use
+`builder.NewGORMBuilderWithOptions` directly. The callback receives the
+normalized operator and value and returns a SQL condition, bound arguments,
+and an error. For example, an `EXISTS (SELECT ... WHERE domain = ?)` fragment
+binds the domain in its arguments. The builder places the condition inside
+AND/OR/NOT groups; the application supplies the SQL and its `QueryPolicy`
+allowlist. Always normalize untrusted filters before applying them; the
+builder does not authorize a field or infer ownership from the predicate.
+
 ### Individual Parameter Parsing
 
 You can also parse parameters individually if needed:

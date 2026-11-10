@@ -9,7 +9,13 @@ import (
 // If building a filter fails, the returned query carries the error in GORM's
 // Error field so later operations cannot run with only part of the filter set.
 func ApplyFilters(tx *gorm.DB, filters []CrudFilter, searchConfig *GlobalSearchConfig) *gorm.DB {
-	b := builder.NewGORMBuilder(tx, searchConfig)
+	return ApplyFiltersWithOptions(tx, filters, searchConfig)
+}
+
+// ApplyFiltersWithOptions applies registered application predicates as well as
+// built-in fields. Normalize untrusted filters with a QueryPolicy first.
+func ApplyFiltersWithOptions(tx *gorm.DB, filters []CrudFilter, searchConfig *GlobalSearchConfig, opts ...builder.GORMOption) *gorm.DB {
+	b := builder.NewGORMBuilderWithOptions(tx, searchConfig, opts...)
 	result, err := b.Apply(tx, filters)
 	if err != nil {
 		// Apply may return tx itself when the first filter fails. Keep errors
