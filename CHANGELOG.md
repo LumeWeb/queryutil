@@ -1,3 +1,13 @@
+## 0.3.25 (2026-11-10)
+
+### Features
+
+- add policy-aware list boundaries
+
+### Fixes
+
+- reject malformed query escapes
+
 ## 0.3.24 (2026-11-10)
 
 ### Fixes
